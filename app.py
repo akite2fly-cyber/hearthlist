@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 import sqlite3
 import string
@@ -114,14 +115,17 @@ def _raw_turso_env() -> tuple[str, str]:
     return url, token
 
 
+_JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+")
+
+
 def turso_credentials() -> tuple[str, str]:
     """Return cleaned Turso URL + JWT, or raise a clear config error."""
     url, token = _raw_turso_env()
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
-    # Accidental "url   token" paste into the token field
-    if "eyJ" in token and not token.startswith("eyJ"):
-        token = token[token.index("eyJ") :].split()[0].strip()
+    match = _JWT_RE.search(token.replace("\n", "").replace("\r", "").replace(" ", ""))
+    if match:
+        token = match.group(0)
     if "://" in token or token.startswith("libsql"):
         raise RuntimeError(
             "TURSO_AUTH_TOKEN looks like a database URL. "
@@ -133,9 +137,17 @@ def turso_credentials() -> tuple[str, str]:
             "Delete it in Render, re-add, and paste only the token (no spaces or labels)."
         )
     if not url.startswith(("libsql://", "https://")):
-        raise RuntimeError(
-            "TURSO_DATABASE_URL must start with libsql:// (from the Turso dashboard)."
-        )
+        # Tolerate accidental paste of "URL=libsql://..."
+        url_match = re.search(r"(?:libsql|https)://[^\s\"']+", url)
+        if url_match:
+            url = url_match.group(0)
+        else:
+            raise RuntimeError(
+                "TURSO_DATABASE_URL must start with libsql:// (from the Turso dashboard)."
+            )
+    # Remote HTTP form is more reliable on PaaS hosts
+    if url.startswith("libsql://"):
+        url = "https://" + url[len("libsql://") :]
     return url, token
 
 
@@ -258,7 +270,20 @@ def connect_db() -> DbConn | sqlite3.Connection:
     return conn
 
 
+_db_ready = False
+
+
+def ensure_db() -> None:
+    """Create schema once per process; never block app import/boot."""
+    global _db_ready
+    if _db_ready:
+        return
+    init_db()
+    _db_ready = True
+
+
 def get_db():
+    ensure_db()
     if "db" not in g:
         g.db = connect_db()
     return g.db
@@ -1516,7 +1541,12 @@ def billing_dev_activate(household, user):
     return redirect(url_for("account"))
 
 
-init_db()
+# Schema is created lazily on first DB use so a Turso blip can't 502 the whole site.
+if not IS_PRODUCTION:
+    try:
+        ensure_db()
+    except Exception as exc:  # pragma: no cover
+        print(f"Local DB init deferred/failed: {exc}")
 
 
 if __name__ == "__main__":

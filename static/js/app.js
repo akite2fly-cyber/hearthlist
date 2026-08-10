@@ -9,6 +9,29 @@ const panels = {
 
 const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
+const CHORE_MOTIVATORS = [
+  "Small jobs, big helpers.",
+  "Done is a superpower.",
+  "Teamwork makes the chores fly.",
+  "Check it off — feel the win.",
+  "Helping hands make a happy home.",
+  "One chore at a time.",
+  "Proud work starts with showing up.",
+  "Little efforts add up fast.",
+  "You make this house shine.",
+  "Finish strong, fridge-chart champs.",
+  "Kindness looks like a finished chore.",
+  "Today’s helpers, tomorrow’s heroes.",
+  "Put it back where it belongs.",
+  "A tidy space is a calm place.",
+  "We did it — together.",
+  "Keep going. You’ve got this.",
+];
+
+function pickChoreMotivator() {
+  return CHORE_MOTIVATORS[Math.floor(Math.random() * CHORE_MOTIVATORS.length)];
+}
+
 function showTab(name) {
   tabs.forEach((tab) => {
     const active = tab.dataset.tab === name;
@@ -548,10 +571,14 @@ function buildPrintCalendar(items) {
   root.innerHTML = "";
   root.hidden = false;
 
+  const quote = pickChoreMotivator();
+  const household = householdNameForPrint();
+
   const header = el("header", "chore-cal-header");
-  header.appendChild(el("p", "chore-cal-kicker", householdNameForPrint()));
+  header.appendChild(el("p", "chore-cal-kicker", household));
   header.appendChild(el("h2", "chore-cal-title", `${monthName} chore calendar`));
   header.appendChild(el("p", "chore-cal-sub", "Check off each day · hang on the fridge"));
+  header.appendChild(el("p", "chore-cal-quote", quote));
   root.appendChild(header);
 
   // Legend by person
@@ -599,6 +626,12 @@ function buildPrintCalendar(items) {
     grid.appendChild(cell);
   }
   root.appendChild(grid);
+
+  const footer = el("footer", "chore-cal-footer");
+  footer.appendChild(el("span", "chore-cal-footer-home", household));
+  footer.appendChild(el("span", "chore-cal-footer-sep", " · "));
+  footer.appendChild(el("span", "chore-cal-footer-quote", quote));
+  root.appendChild(footer);
 }
 
 function printChoreChart() {

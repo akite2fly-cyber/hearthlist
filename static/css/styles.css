@@ -1426,7 +1426,7 @@ a {
 
   .chore-cal-header {
     text-align: center;
-    margin-bottom: 0.55rem;
+    margin-bottom: 0.4rem;
   }
 
   .chore-cal-kicker {
@@ -1439,16 +1439,26 @@ a {
   }
 
   .chore-cal-title {
-    margin: 0.15rem 0;
+    margin: 0.1rem 0;
     font-family: var(--font-display);
-    font-size: 1.85rem;
+    font-size: 1.75rem;
     color: #1c2a24;
   }
 
   .chore-cal-sub {
     margin: 0;
     color: #5a6b63;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+  }
+
+  .chore-cal-quote {
+    margin: 0.28rem 0 0;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-style: italic;
+    font-weight: 600;
+    color: #1f4d3a;
+    line-height: 1.25;
   }
 
   .chore-cal-legend {
@@ -1456,7 +1466,7 @@ a {
     flex-wrap: wrap;
     gap: 0.4rem;
     justify-content: center;
-    margin: 0.55rem 0 0.75rem;
+    margin: 0.4rem 0 0.55rem;
   }
 
   .chore-cal-chip {
@@ -1541,6 +1551,34 @@ a {
     font-size: 0.58rem;
     color: #5a6b63;
     font-weight: 700;
+  }
+
+  .chore-cal-footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    gap: 0.15rem;
+    margin-top: 0.45rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid #d7cfc0;
+    text-align: center;
+    font-size: 0.72rem;
+    color: #5a6b63;
+  }
+
+  .chore-cal-footer-home {
+    font-weight: 800;
+    color: #1f4d3a;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .chore-cal-footer-quote {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-weight: 600;
+    color: #1f4d3a;
   }
 
   .print-only,

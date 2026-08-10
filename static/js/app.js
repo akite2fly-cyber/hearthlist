@@ -3,8 +3,11 @@ const panels = {
   groceries: document.getElementById("panel-groceries"),
   meals: document.getElementById("panel-meals"),
   chores: document.getElementById("panel-chores"),
+  reminders: document.getElementById("panel-reminders"),
   people: document.getElementById("panel-people"),
 };
+
+const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function showTab(name) {
   tabs.forEach((tab) => {
@@ -166,8 +169,16 @@ async function loadChores() {
     });
     const body = el("div");
     body.appendChild(el("div", "item-title", item.title));
-    const meta = [item.assignee, item.due_date].filter(Boolean).join(" · ");
-    if (meta) body.appendChild(el("div", "item-meta", meta));
+    const bits = [];
+    if (item.assignee) bits.push(item.assignee);
+    if (item.due_date) bits.push(`Due ${item.due_date}`);
+    if (item.recurrence === "daily") bits.push("Repeats daily");
+    if (item.recurrence === "weekly") {
+      const day =
+        item.recurrence_weekday != null ? WEEKDAY_NAMES[item.recurrence_weekday] : "weekly";
+      bits.push(`Repeats every ${day}`);
+    }
+    if (bits.length) body.appendChild(el("div", "item-meta", bits.join(" · ")));
     const remove = el("button", "item-remove", "×");
     remove.type = "button";
     remove.addEventListener("click", async () => {
@@ -179,6 +190,14 @@ async function loadChores() {
   }
 }
 
+const choreRecurrence = document.getElementById("chore-recurrence");
+const choreWeekday = document.getElementById("chore-weekday");
+if (choreRecurrence && choreWeekday) {
+  choreRecurrence.addEventListener("change", () => {
+    choreWeekday.hidden = choreRecurrence.value !== "weekly";
+  });
+}
+
 const choreForm = document.getElementById("chore-form");
 if (choreForm) {
   choreForm.addEventListener("submit", async (e) => {
@@ -186,13 +205,23 @@ if (choreForm) {
     const title = document.getElementById("chore-title").value.trim();
     const assignee = document.getElementById("chore-assignee").value.trim();
     const due_date = document.getElementById("chore-due").value;
+    const recurrence = document.getElementById("chore-recurrence").value;
+    const recurrence_weekday = Number(document.getElementById("chore-weekday").value);
     if (!title) return;
     try {
       await api("/api/chores", {
         method: "POST",
-        body: JSON.stringify({ title, assignee, due_date }),
+        body: JSON.stringify({
+          title,
+          assignee,
+          due_date,
+          recurrence,
+          recurrence_weekday: recurrence === "weekly" ? recurrence_weekday : null,
+        }),
       });
       choreForm.reset();
+      document.getElementById("chore-recurrence").value = "none";
+      document.getElementById("chore-weekday").hidden = true;
       loadChores();
     } catch (err) {
       alert(err.message);
@@ -200,9 +229,178 @@ if (choreForm) {
   });
 }
 
-Promise.all([loadGroceries(), loadMeals(), loadChores()]).catch(() => {
-  /* panels may not exist on other pages */
+function notifiedKey(id) {
+  const today = new Date().toISOString().slice(0, 10);
+  return `hearthlist-notified-${id}-${today}`;
+}
+
+async function ensureServiceWorker() {
+  if (!("serviceWorker" in navigator)) return null;
+  try {
+    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  } catch (_) {
+    return null;
+  }
+}
+
+function updateNotifyStatus() {
+  const status = document.getElementById("notify-permission-status");
+  if (!status || !("Notification" in window)) return;
+  if (Notification.permission === "granted") {
+    status.textContent = "Popup notifications are on.";
+  } else if (Notification.permission === "denied") {
+    status.textContent = "Notifications are blocked in browser settings.";
+  } else {
+    status.textContent = "Your browser will ask for permission once.";
+  }
+}
+
+async function showBrowserNotification(title, body, tag) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const reg = await ensureServiceWorker();
+  if (reg && reg.active) {
+    reg.active.postMessage({ type: "SHOW_REMINDER", title, body, tag });
+    return;
+  }
+  new Notification(title, { body, tag });
+}
+
+function showReminderPopup(items) {
+  const popup = document.getElementById("reminder-popup");
+  const list = document.getElementById("reminder-popup-list");
+  const title = document.getElementById("reminder-popup-title");
+  if (!popup || !list) return;
+  list.innerHTML = "";
+  title.textContent = items.length === 1 ? items[0].title : "Today’s reminders";
+  for (const item of items) {
+    const li = el("li");
+    li.textContent = `${item.title} · ${item.notify_time}`;
+    list.appendChild(li);
+  }
+  popup.hidden = false;
+}
+
+document.getElementById("reminder-popup-close")?.addEventListener("click", () => {
+  const popup = document.getElementById("reminder-popup");
+  if (popup) popup.hidden = true;
 });
+
+document.getElementById("enable-notifications")?.addEventListener("click", async () => {
+  if (!("Notification" in window)) {
+    alert("This browser doesn’t support notifications.");
+    return;
+  }
+  await ensureServiceWorker();
+  const result = await Notification.requestPermission();
+  updateNotifyStatus();
+  if (result === "granted") {
+    await showBrowserNotification(
+      "Hearthlist reminders on",
+      "We’ll pop up for garbage day and other reminders.",
+      "hearthlist-enabled"
+    );
+    checkDueReminders();
+  }
+});
+
+async function loadReminders() {
+  const list = document.getElementById("reminder-list");
+  if (!list) return;
+  const data = await api("/api/reminders");
+  list.innerHTML = "";
+  if (!data.items.length) {
+    list.appendChild(el("li", "item-meta", "No reminders yet — try “Garbage day”."));
+    return;
+  }
+  for (const item of data.items) {
+    const li = el("li");
+    const body = el("div");
+    body.appendChild(el("div", "item-title", item.title));
+    body.appendChild(
+      el(
+        "div",
+        "item-meta",
+        `${WEEKDAY_NAMES[item.weekday]} at ${item.notify_time}${item.is_today ? " · today" : ""}`
+      )
+    );
+    const toggle = el("button", "item-check", item.enabled ? "On" : "Off");
+    toggle.type = "button";
+    toggle.addEventListener("click", async () => {
+      await api(`/api/reminders/${item.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled: !item.enabled }),
+      });
+      loadReminders();
+    });
+    const remove = el("button", "item-remove", "×");
+    remove.type = "button";
+    remove.addEventListener("click", async () => {
+      await api(`/api/reminders/${item.id}`, { method: "DELETE" });
+      loadReminders();
+    });
+    li.append(toggle, body, remove);
+    list.appendChild(li);
+  }
+}
+
+async function checkDueReminders() {
+  try {
+    const data = await api("/api/reminders");
+    const now = new Date();
+    const due = [];
+    for (const item of data.items || []) {
+      if (!item.enabled || !item.is_today) continue;
+      const [h, m] = (item.notify_time || "07:00").split(":").map(Number);
+      const ready = now.getHours() > h || (now.getHours() === h && now.getMinutes() >= m);
+      if (!ready) continue;
+      if (localStorage.getItem(notifiedKey(item.id))) continue;
+      due.push(item);
+      localStorage.setItem(notifiedKey(item.id), "1");
+      await showBrowserNotification(
+        item.title,
+        `Hearthlist reminder · ${WEEKDAY_NAMES[item.weekday]} ${item.notify_time}`,
+        `reminder-${item.id}`
+      );
+    }
+    if (due.length) showReminderPopup(due);
+  } catch (_) {
+    /* ignore when logged out */
+  }
+}
+
+const reminderForm = document.getElementById("reminder-form");
+if (reminderForm) {
+  reminderForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = document.getElementById("reminder-title").value.trim();
+    const weekday = Number(document.getElementById("reminder-weekday").value);
+    const notify_time = document.getElementById("reminder-time").value || "07:00";
+    if (!title) return;
+    try {
+      await api("/api/reminders", {
+        method: "POST",
+        body: JSON.stringify({ title, weekday, notify_time }),
+      });
+      reminderForm.reset();
+      document.getElementById("reminder-time").value = "07:00";
+      loadReminders();
+      checkDueReminders();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
+
+Promise.all([loadGroceries(), loadMeals(), loadChores(), loadReminders()])
+  .then(() => {
+    updateNotifyStatus();
+    ensureServiceWorker();
+    checkDueReminders();
+    setInterval(checkDueReminders, 60 * 1000);
+  })
+  .catch(() => {
+    /* panels may not exist on other pages */
+  });
 
 const inviteCard = document.getElementById("invite-card");
 const inviteStatus = document.getElementById("invite-status");

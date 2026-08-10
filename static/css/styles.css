@@ -719,7 +719,60 @@ a {
 }
 
 .chore-form {
-  grid-template-columns: 1.4fr 0.8fr 0.8fr auto;
+  grid-template-columns: 1.1fr 0.7fr 0.7fr 0.75fr auto;
+}
+
+.chore-form select,
+.reminder-form select,
+.reminder-form input {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.75rem 0.9rem;
+  font: inherit;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.reminder-form {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 0.7fr auto;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.notify-enable {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.9rem;
+}
+
+.reminder-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(28, 42, 36, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.reminder-popup[hidden] {
+  display: none !important;
+}
+
+.reminder-popup-card {
+  width: min(420px, 100%);
+  background: #fffdf8;
+  border-radius: 22px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow);
+}
+
+.reminder-popup-card ul {
+  margin: 0.75rem 0 1rem;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
 }
 
 .item-list,
@@ -881,7 +934,8 @@ a {
   .price-grid,
   .auth-layout,
   .account-grid,
-  .chore-form {
+  .chore-form,
+  .reminder-form {
     grid-template-columns: 1fr;
   }
 

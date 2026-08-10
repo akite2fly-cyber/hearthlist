@@ -33,6 +33,7 @@
   <button type="button" class="tab is-active" data-tab="groceries" role="tab" aria-selected="true">Groceries</button>
   <button type="button" class="tab" data-tab="meals" role="tab" aria-selected="false">Meals</button>
   <button type="button" class="tab" data-tab="chores" role="tab" aria-selected="false">Chores</button>
+  <button type="button" class="tab" data-tab="reminders" role="tab" aria-selected="false">Reminders</button>
   <button type="button" class="tab" data-tab="people" role="tab" aria-selected="false">People</button>
 </nav>
 
@@ -75,9 +76,51 @@
       <input id="chore-title" type="text" placeholder="Take out recycling" maxlength="200" required />
       <input id="chore-assignee" type="text" placeholder="Who?" maxlength="80" />
       <input id="chore-due" type="date" />
+      <select id="chore-recurrence" title="Repeat">
+        <option value="none">One time</option>
+        <option value="daily">Every day</option>
+        <option value="weekly">Every week</option>
+      </select>
+      <select id="chore-weekday" title="Weekday" hidden>
+        <option value="0">Monday</option>
+        <option value="1">Tuesday</option>
+        <option value="2">Wednesday</option>
+        <option value="3">Thursday</option>
+        <option value="4">Friday</option>
+        <option value="5">Saturday</option>
+        <option value="6">Sunday</option>
+      </select>
       <button class="btn btn-primary" type="submit">Add chore</button>
     </form>
     <ul id="chore-list" class="item-list"></ul>
+  </section>
+
+  <section class="panel" id="panel-reminders" role="tabpanel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2>Reminders</h2>
+        <p class="hint">Garbage day, recycling, bill due — get a popup on that day.</p>
+      </div>
+    </div>
+    <div class="notify-enable">
+      <button type="button" class="btn btn-primary" id="enable-notifications">Enable popup notifications</button>
+      <p class="hint" id="notify-permission-status">Your browser will ask for permission once.</p>
+    </div>
+    <form id="reminder-form" class="reminder-form">
+      <input id="reminder-title" type="text" placeholder="Garbage day" maxlength="200" required />
+      <select id="reminder-weekday" required>
+        <option value="0">Monday</option>
+        <option value="1">Tuesday</option>
+        <option value="2">Wednesday</option>
+        <option value="3">Thursday</option>
+        <option value="4">Friday</option>
+        <option value="5">Saturday</option>
+        <option value="6">Sunday</option>
+      </select>
+      <input id="reminder-time" type="time" value="07:00" required />
+      <button class="btn btn-primary" type="submit">Add reminder</button>
+    </form>
+    <ul id="reminder-list" class="item-list"></ul>
   </section>
 
   <section class="panel" id="panel-people" role="tabpanel" hidden>
@@ -120,6 +163,15 @@
     </ul>
   </section>
 </main>
+
+<div id="reminder-popup" class="reminder-popup" hidden>
+  <div class="reminder-popup-card" role="dialog" aria-modal="true" aria-labelledby="reminder-popup-title">
+    <p class="eyebrow">Today’s reminder</p>
+    <h2 id="reminder-popup-title">Reminder</h2>
+    <ul id="reminder-popup-list"></ul>
+    <button type="button" class="btn btn-primary" id="reminder-popup-close">Got it</button>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>

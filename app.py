@@ -199,6 +199,8 @@ def init_db() -> None:
             assignee TEXT NOT NULL DEFAULT '',
             done INTEGER NOT NULL DEFAULT 0,
             due_date TEXT,
+            recurrence TEXT NOT NULL DEFAULT 'none',
+            recurrence_weekday INTEGER,
             created_at TEXT NOT NULL,
             FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
         );
@@ -212,10 +214,59 @@ def init_db() -> None:
             created_at TEXT NOT NULL,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            household_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            weekday INTEGER NOT NULL,
+            notify_time TEXT NOT NULL DEFAULT '07:00',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
+        );
         """
     )
+    # Migrations for older local/prod DBs
+    chore_cols = {row[1] for row in db.execute("PRAGMA table_info(chores)").fetchall()}
+    if "recurrence" not in chore_cols:
+        db.execute("ALTER TABLE chores ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'none'")
+    if "recurrence_weekday" not in chore_cols:
+        db.execute("ALTER TABLE chores ADD COLUMN recurrence_weekday INTEGER")
     db.commit()
     db.close()
+
+
+def next_chore_due(recurrence: str, weekday: int | None, from_day: date | None = None) -> str | None:
+    """Return next ISO due date after completing a recurring chore."""
+    base = from_day or date.today()
+    if recurrence == "daily":
+        return (base + timedelta(days=1)).isoformat()
+    if recurrence == "weekly":
+        target = 0 if weekday is None else int(weekday)
+        days_ahead = (target - base.weekday()) % 7
+        if days_ahead == 0:
+            days_ahead = 7
+        return (base + timedelta(days=days_ahead)).isoformat()
+    return None
+
+
+def chore_row(r: sqlite3.Row) -> dict:
+    keys = r.keys()
+    return {
+        "id": r["id"],
+        "title": r["title"],
+        "assignee": r["assignee"] or "",
+        "done": bool(r["done"]),
+        "due_date": r["due_date"],
+        "recurrence": r["recurrence"] if "recurrence" in keys and r["recurrence"] else "none",
+        "recurrence_weekday": (
+            int(r["recurrence_weekday"])
+            if "recurrence_weekday" in keys and r["recurrence_weekday"] is not None
+            else None
+        ),
+        "created_at": r["created_at"],
+    }
 
 
 def public_base_url() -> str:
@@ -885,28 +936,14 @@ def api_chores_list():
         return err
     rows = get_db().execute(
         """
-        SELECT id, title, assignee, done, due_date, created_at
+        SELECT id, title, assignee, done, due_date, recurrence, recurrence_weekday, created_at
         FROM chores
         WHERE household_id = ?
         ORDER BY done ASC, id DESC
         """,
         (household["id"],),
     ).fetchall()
-    return jsonify(
-        {
-            "items": [
-                {
-                    "id": r["id"],
-                    "title": r["title"],
-                    "assignee": r["assignee"] or "",
-                    "done": bool(r["done"]),
-                    "due_date": r["due_date"],
-                    "created_at": r["created_at"],
-                }
-                for r in rows
-            ]
-        }
-    )
+    return jsonify({"items": [chore_row(r) for r in rows]})
 
 
 @app.post("/api/chores")
@@ -921,6 +958,19 @@ def api_chores_create():
     title = (payload.get("title") or "").strip()
     assignee = (payload.get("assignee") or "").strip()[:80]
     due_date = (payload.get("due_date") or "").strip() or None
+    recurrence = (payload.get("recurrence") or "none").strip().lower()
+    if recurrence not in ("none", "daily", "weekly"):
+        return jsonify({"error": "recurrence must be none, daily, or weekly"}), 400
+    recurrence_weekday = payload.get("recurrence_weekday")
+    if recurrence == "weekly":
+        try:
+            recurrence_weekday = int(recurrence_weekday)
+        except (TypeError, ValueError):
+            recurrence_weekday = date.today().weekday()
+        if recurrence_weekday < 0 or recurrence_weekday > 6:
+            return jsonify({"error": "recurrence_weekday must be 0–6"}), 400
+    else:
+        recurrence_weekday = None
     if not title:
         return jsonify({"error": "title required"}), 400
     if due_date:
@@ -928,16 +978,36 @@ def api_chores_create():
             date.fromisoformat(due_date)
         except ValueError:
             return jsonify({"error": "Invalid due date"}), 400
+    elif recurrence in ("daily", "weekly"):
+        due_date = date.today().isoformat()
+        if recurrence == "weekly":
+            # Align first due date to chosen weekday
+            due_date = next_chore_due("weekly", recurrence_weekday, date.today() - timedelta(days=1))
+
     db = get_db()
     cur = db.execute(
         """
-        INSERT INTO chores (household_id, title, assignee, done, due_date, created_at)
-        VALUES (?, ?, ?, 0, ?, ?)
+        INSERT INTO chores (
+            household_id, title, assignee, done, due_date, recurrence, recurrence_weekday, created_at
+        )
+        VALUES (?, ?, ?, 0, ?, ?, ?, ?)
         """,
-        (household["id"], title[:200], assignee, due_date, utc_now_iso()),
+        (
+            household["id"],
+            title[:200],
+            assignee,
+            due_date,
+            recurrence,
+            recurrence_weekday,
+            utc_now_iso(),
+        ),
     )
     db.commit()
-    return jsonify({"id": cur.lastrowid, "title": title, "assignee": assignee, "done": False, "due_date": due_date}), 201
+    row = db.execute(
+        "SELECT id, title, assignee, done, due_date, recurrence, recurrence_weekday, created_at FROM chores WHERE id = ?",
+        (cur.lastrowid,),
+    ).fetchone()
+    return jsonify(chore_row(row)), 201
 
 
 @app.patch("/api/chores/<int:chore_id>")
@@ -950,7 +1020,10 @@ def api_chores_update(chore_id: int):
         return jsonify({"error": "Trial ended. Subscribe to keep editing."}), 402
     db = get_db()
     row = db.execute(
-        "SELECT * FROM chores WHERE id = ? AND household_id = ?",
+        """
+        SELECT id, title, assignee, done, due_date, recurrence, recurrence_weekday, created_at
+        FROM chores WHERE id = ? AND household_id = ?
+        """,
         (chore_id, household["id"]),
     ).fetchone()
     if not row:
@@ -960,20 +1033,52 @@ def api_chores_update(chore_id: int):
     assignee = row["assignee"]
     done = row["done"]
     due_date = row["due_date"]
+    recurrence = row["recurrence"] if "recurrence" in row.keys() and row["recurrence"] else "none"
+    recurrence_weekday = (
+        int(row["recurrence_weekday"])
+        if "recurrence_weekday" in row.keys() and row["recurrence_weekday"] is not None
+        else None
+    )
+
     if "title" in payload:
         title = str(payload["title"]).strip()[:200]
     if "assignee" in payload:
         assignee = str(payload["assignee"]).strip()[:80]
-    if "done" in payload:
-        done = 1 if payload["done"] else 0
     if "due_date" in payload:
-        due_date = (str(payload["due_date"]).strip() or None)
+        due_date = str(payload["due_date"]).strip() or None
+    if "recurrence" in payload:
+        recurrence = str(payload["recurrence"]).strip().lower()
+        if recurrence not in ("none", "daily", "weekly"):
+            return jsonify({"error": "invalid recurrence"}), 400
+    if "recurrence_weekday" in payload and payload["recurrence_weekday"] is not None:
+        try:
+            recurrence_weekday = int(payload["recurrence_weekday"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid recurrence_weekday"}), 400
+
+    if "done" in payload:
+        marking_done = bool(payload["done"])
+        if marking_done and recurrence in ("daily", "weekly"):
+            # Recurring: roll forward instead of staying checked forever
+            done = 0
+            due_date = next_chore_due(recurrence, recurrence_weekday, date.today())
+        else:
+            done = 1 if marking_done else 0
+
     db.execute(
-        "UPDATE chores SET title = ?, assignee = ?, done = ?, due_date = ? WHERE id = ?",
-        (title, assignee, done, due_date, chore_id),
+        """
+        UPDATE chores
+        SET title = ?, assignee = ?, done = ?, due_date = ?, recurrence = ?, recurrence_weekday = ?
+        WHERE id = ?
+        """,
+        (title, assignee, done, due_date, recurrence, recurrence_weekday, chore_id),
     )
     db.commit()
-    return jsonify({"id": chore_id, "title": title, "assignee": assignee, "done": bool(done), "due_date": due_date})
+    updated = db.execute(
+        "SELECT id, title, assignee, done, due_date, recurrence, recurrence_weekday, created_at FROM chores WHERE id = ?",
+        (chore_id,),
+    ).fetchone()
+    return jsonify(chore_row(updated))
 
 
 @app.delete("/api/chores/<int:chore_id>")
@@ -988,6 +1093,173 @@ def api_chores_delete(chore_id: int):
     )
     get_db().commit()
     return jsonify({"ok": True})
+
+
+@app.get("/api/reminders")
+@login_required
+def api_reminders_list():
+    user, household, err = household_for_api()
+    if err:
+        return err
+    rows = get_db().execute(
+        """
+        SELECT id, title, weekday, notify_time, enabled, created_at
+        FROM reminders
+        WHERE household_id = ?
+        ORDER BY weekday ASC, notify_time ASC, id ASC
+        """,
+        (household["id"],),
+    ).fetchall()
+    today = date.today().weekday()  # Mon=0
+    return jsonify(
+        {
+            "today_weekday": today,
+            "items": [
+                {
+                    "id": r["id"],
+                    "title": r["title"],
+                    "weekday": int(r["weekday"]),
+                    "notify_time": r["notify_time"] or "07:00",
+                    "enabled": bool(r["enabled"]),
+                    "created_at": r["created_at"],
+                    "is_today": int(r["weekday"]) == today and bool(r["enabled"]),
+                }
+                for r in rows
+            ],
+        }
+    )
+
+
+@app.post("/api/reminders")
+@login_required
+def api_reminders_create():
+    user, household, err = household_for_api()
+    if err:
+        return err
+    if not plan_status(household)["access"]:
+        return jsonify({"error": "Trial ended. Subscribe to keep editing."}), 402
+    payload = request.get_json(silent=True) or {}
+    title = (payload.get("title") or "").strip()[:200]
+    try:
+        weekday = int(payload.get("weekday"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "weekday required (0=Mon … 6=Sun)"}), 400
+    if weekday < 0 or weekday > 6:
+        return jsonify({"error": "weekday must be 0–6"}), 400
+    notify_time = (payload.get("notify_time") or "07:00").strip()
+    try:
+        hour_s, minute_s = notify_time.split(":", 1)
+        hour, minute = int(hour_s), int(minute_s)
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            raise ValueError
+        notify_time = f"{hour:02d}:{minute:02d}"
+    except ValueError:
+        return jsonify({"error": "notify_time must be HH:MM"}), 400
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    db = get_db()
+    cur = db.execute(
+        """
+        INSERT INTO reminders (household_id, title, weekday, notify_time, enabled, created_at)
+        VALUES (?, ?, ?, ?, 1, ?)
+        """,
+        (household["id"], title, weekday, notify_time, utc_now_iso()),
+    )
+    db.commit()
+    return jsonify(
+        {
+            "id": cur.lastrowid,
+            "title": title,
+            "weekday": weekday,
+            "notify_time": notify_time,
+            "enabled": True,
+        }
+    ), 201
+
+
+@app.patch("/api/reminders/<int:reminder_id>")
+@login_required
+def api_reminders_update(reminder_id: int):
+    user, household, err = household_for_api()
+    if err:
+        return err
+    if not plan_status(household)["access"]:
+        return jsonify({"error": "Trial ended. Subscribe to keep editing."}), 402
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM reminders WHERE id = ? AND household_id = ?",
+        (reminder_id, household["id"]),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    payload = request.get_json(silent=True) or {}
+    title = row["title"]
+    weekday = int(row["weekday"])
+    notify_time = row["notify_time"] or "07:00"
+    enabled = row["enabled"]
+    if "title" in payload:
+        title = str(payload["title"]).strip()[:200]
+        if not title:
+            return jsonify({"error": "title required"}), 400
+    if "weekday" in payload:
+        try:
+            weekday = int(payload["weekday"])
+        except (TypeError, ValueError):
+            return jsonify({"error": "invalid weekday"}), 400
+        if weekday < 0 or weekday > 6:
+            return jsonify({"error": "weekday must be 0–6"}), 400
+    if "notify_time" in payload:
+        notify_time = str(payload["notify_time"]).strip()
+        try:
+            hour_s, minute_s = notify_time.split(":", 1)
+            hour, minute = int(hour_s), int(minute_s)
+            if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+                raise ValueError
+            notify_time = f"{hour:02d}:{minute:02d}"
+        except ValueError:
+            return jsonify({"error": "notify_time must be HH:MM"}), 400
+    if "enabled" in payload:
+        enabled = 1 if payload["enabled"] else 0
+    db.execute(
+        """
+        UPDATE reminders
+        SET title = ?, weekday = ?, notify_time = ?, enabled = ?
+        WHERE id = ?
+        """,
+        (title, weekday, notify_time, enabled, reminder_id),
+    )
+    db.commit()
+    return jsonify(
+        {
+            "id": reminder_id,
+            "title": title,
+            "weekday": weekday,
+            "notify_time": notify_time,
+            "enabled": bool(enabled),
+        }
+    )
+
+
+@app.delete("/api/reminders/<int:reminder_id>")
+@login_required
+def api_reminders_delete(reminder_id: int):
+    user, household, err = household_for_api()
+    if err:
+        return err
+    get_db().execute(
+        "DELETE FROM reminders WHERE id = ? AND household_id = ?",
+        (reminder_id, household["id"]),
+    )
+    get_db().commit()
+    return jsonify({"ok": True})
+
+
+@app.get("/sw.js")
+def service_worker():
+    return app.send_static_file("sw.js"), 200, {
+        "Content-Type": "application/javascript; charset=utf-8",
+        "Service-Worker-Allowed": "/",
+    }
 
 
 # ---------- Stripe ----------

@@ -346,47 +346,133 @@ document.getElementById("meal-editor")?.addEventListener("click", (e) => {
 });
 
 async function loadChores() {
-  const list = document.getElementById("chore-list");
-  if (!list) return;
+  const groupsEl = document.getElementById("chore-groups");
+  if (!groupsEl) return;
   const data = await api("/api/chores");
-  list.innerHTML = "";
-  if (!data.items.length) {
-    list.appendChild(el("li", "item-meta", "No chores yet."));
+  groupsEl.innerHTML = "";
+
+  const items = data.items || [];
+  if (!items.length) {
+    groupsEl.appendChild(el("p", "item-meta", "No chores yet."));
+    updateAssigneeSuggestions([]);
     return;
   }
-  for (const item of data.items) {
-    const li = el("li", item.done ? "is-done" : "");
-    const check = el("button", "item-check", item.done ? "✓" : "○");
-    check.type = "button";
-    check.addEventListener("click", async () => {
-      await api(`/api/chores/${item.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ done: !item.done }),
-      });
-      loadChores();
-    });
-    const body = el("div");
-    body.appendChild(el("div", "item-title", item.title));
-    const bits = [];
-    if (item.assignee) bits.push(item.assignee);
-    if (item.due_date) bits.push(`Due ${item.due_date}`);
-    if (item.recurrence === "daily") bits.push("Repeats daily");
-    if (item.recurrence === "weekly") {
-      const day =
-        item.recurrence_weekday != null ? WEEKDAY_NAMES[item.recurrence_weekday] : "weekly";
-      bits.push(`Repeats every ${day}`);
+
+  const byName = new Map();
+  for (const item of items) {
+    const name = (item.assignee || "").trim() || "Unassigned";
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(item);
+  }
+
+  const names = [...byName.keys()].sort((a, b) => {
+    if (a === "Unassigned") return 1;
+    if (b === "Unassigned") return -1;
+    return a.localeCompare(b, undefined, { sensitivity: "base" });
+  });
+
+  updateAssigneeSuggestions(names.filter((n) => n !== "Unassigned"));
+
+  for (const name of names) {
+    const groupItems = byName.get(name);
+    const openCount = groupItems.filter((i) => !i.done).length;
+    const section = el("section", "chore-group");
+    section.dataset.assignee = name;
+
+    const head = el("div", "chore-group-head");
+    head.appendChild(el("h3", "chore-group-name", name));
+    head.appendChild(
+      el("span", "chore-group-count", openCount ? `${openCount} open` : "All done")
+    );
+    section.appendChild(head);
+
+    const list = el("ul", "item-list chore-group-list");
+    for (const item of groupItems) {
+      list.appendChild(buildChoreRow(item));
     }
-    if (bits.length) body.appendChild(el("div", "item-meta", bits.join(" · ")));
-    const remove = el("button", "item-remove", "×");
-    remove.type = "button";
-    remove.addEventListener("click", async () => {
-      await api(`/api/chores/${item.id}`, { method: "DELETE" });
-      loadChores();
-    });
-    li.append(check, body, remove);
-    list.appendChild(li);
+    section.appendChild(list);
+    groupsEl.appendChild(section);
   }
 }
+
+function buildChoreRow(item) {
+  const li = el("li", item.done ? "is-done" : "");
+  const check = el("button", "item-check no-print", item.done ? "✓" : "○");
+  check.type = "button";
+  check.addEventListener("click", async () => {
+    await api(`/api/chores/${item.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ done: !item.done }),
+    });
+    loadChores();
+  });
+
+  const printBox = el("span", "chore-print-box print-only", "");
+  printBox.setAttribute("aria-hidden", "true");
+
+  const body = el("div");
+  body.appendChild(el("div", "item-title", item.title));
+  const bits = [];
+  if (item.due_date) bits.push(`Due ${item.due_date}`);
+  if (item.recurrence === "daily") bits.push("Every day");
+  if (item.recurrence === "weekly") {
+    const day =
+      item.recurrence_weekday != null ? WEEKDAY_NAMES[item.recurrence_weekday] : "week";
+    bits.push(`Every ${day}`);
+  }
+  if (bits.length) body.appendChild(el("div", "item-meta", bits.join(" · ")));
+
+  const remove = el("button", "item-remove no-print", "×");
+  remove.type = "button";
+  remove.addEventListener("click", async () => {
+    await api(`/api/chores/${item.id}`, { method: "DELETE" });
+    loadChores();
+  });
+
+  li.append(check, printBox, body, remove);
+  return li;
+}
+
+function updateAssigneeSuggestions(names) {
+  const list = document.getElementById("chore-assignee-suggestions");
+  if (!list) return;
+  list.innerHTML = "";
+  for (const name of names) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    list.appendChild(opt);
+  }
+}
+
+function householdNameForPrint() {
+  return (
+    document.getElementById("invite-card")?.dataset.householdName ||
+    document.querySelector(".app-title")?.textContent?.trim() ||
+    "Our home"
+  );
+}
+
+function printChoreChart() {
+  const groupsEl = document.getElementById("chore-groups");
+  if (!groupsEl || !groupsEl.querySelector(".chore-group")) {
+    alert("Add a few chores (with names in Who?) before printing.");
+    return;
+  }
+  document.body.classList.add("printing-chores");
+  const title = document.title;
+  document.title = `${householdNameForPrint()} chore chart`;
+  const cleanup = () => {
+    document.body.classList.remove("printing-chores");
+    document.title = title;
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  window.print();
+  // Fallback if afterprint never fires (some mobile browsers)
+  setTimeout(cleanup, 1000);
+}
+
+document.getElementById("print-chores")?.addEventListener("click", printChoreChart);
 
 const choreRecurrence = document.getElementById("chore-recurrence");
 const choreWeekday = document.getElementById("chore-weekday");

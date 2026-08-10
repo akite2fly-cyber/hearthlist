@@ -68,13 +68,17 @@
     <div class="panel-head">
       <div>
         <h2>Chores</h2>
-        <p class="hint">Assign a person and check them off.</p>
+        <p class="hint">Grouped by who does them — print a chart for the fridge.</p>
       </div>
-      <img class="panel-thumb" src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80" alt="" />
+      <div class="panel-head-actions">
+        <button type="button" class="btn btn-ghost" id="print-chores">Print chore chart</button>
+        <img class="panel-thumb" src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80" alt="" />
+      </div>
     </div>
-    <form id="chore-form" class="chore-form">
+    <form id="chore-form" class="chore-form no-print">
       <input id="chore-title" type="text" placeholder="Take out recycling" maxlength="200" required />
-      <input id="chore-assignee" type="text" placeholder="Who?" maxlength="80" />
+      <input id="chore-assignee" type="text" placeholder="Who?" maxlength="80" list="chore-assignee-suggestions" />
+      <datalist id="chore-assignee-suggestions"></datalist>
       <input id="chore-due" type="date" />
       <select id="chore-recurrence" title="Repeat">
         <option value="none">One time</option>
@@ -92,7 +96,7 @@
       </select>
       <button class="btn btn-primary" type="submit">Add chore</button>
     </form>
-    <ul id="chore-list" class="item-list"></ul>
+    <div id="chore-groups" class="chore-groups"></div>
   </section>
 
   <section class="panel" id="panel-reminders" role="tabpanel" hidden>

@@ -17,10 +17,14 @@ Same path as Daywing.
    - **Start:** `gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120`
 4. Environment variables:
    - `SECRET_KEY` — Generate
-   - `DATA_DIR` — `/opt/render/project/src/data`
    - `BASE_URL` — your live URL, e.g. `https://hearthlist.onrender.com`
+   - `TURSO_DATABASE_URL` — from Turso dashboard (e.g. `libsql://….turso.io`)
+   - `TURSO_AUTH_TOKEN` — Turso database token
+   - `DATA_DIR` — optional fallback only if Turso is not set (`/opt/render/project/src/data`)
    - Stripe keys when ready (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_MONTHLY`, …)
 5. Deploy → open the `.onrender.com` URL
+
+With Turso set, signups survive Render redeploys. Create the DB at [app.turso.tech](https://app.turso.tech/).
 
 ## 3) Stripe live later
 

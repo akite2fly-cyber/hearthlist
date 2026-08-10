@@ -9,6 +9,7 @@ import string
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
 from flask import (
     Flask,
@@ -27,6 +28,11 @@ try:
     import stripe
 except ImportError:  # pragma: no cover
     stripe = None
+
+try:
+    import libsql
+except ImportError:  # pragma: no cover
+    libsql = None
 
 BASE_DIR = Path(__file__).resolve().parent
 ENV_PATH = BASE_DIR / ".env"
@@ -59,6 +65,8 @@ def ensure_env() -> dict[str, str]:
         "SECRET_KEY",
         "DATA_DIR",
         "BASE_URL",
+        "TURSO_DATABASE_URL",
+        "TURSO_AUTH_TOKEN",
         "STRIPE_SECRET_KEY",
         "STRIPE_PUBLISHABLE_KEY",
         "STRIPE_WEBHOOK_SECRET",
@@ -71,7 +79,7 @@ def ensure_env() -> dict[str, str]:
 
     if not values.get("SECRET_KEY"):
         values["SECRET_KEY"] = secrets.token_hex(32)
-        if not IS_PRODUCTION:
+        if not IS_PRODUCTION and not ENV_PATH.exists():
             try:
                 ENV_PATH.write_text(
                     f"SECRET_KEY={values['SECRET_KEY']}\nBASE_URL=http://127.0.0.1:5060\n",
@@ -93,6 +101,10 @@ def resolve_db_path() -> Path:
     if data_dir:
         return Path(data_dir) / "hearthlist.db"
     return BASE_DIR / "data" / "hearthlist.db"
+
+
+def use_turso() -> bool:
+    return bool(os.environ.get("TURSO_DATABASE_URL") and os.environ.get("TURSO_AUTH_TOKEN"))
 
 
 DB_PATH = resolve_db_path()
@@ -117,12 +129,108 @@ def utc_now_iso() -> str:
     return utc_now().isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def get_db() -> sqlite3.Connection:
+class DbRow:
+    """sqlite3.Row-like access for drivers that only return tuples (libsql)."""
+
+    __slots__ = ("_keys", "_values", "_map")
+
+    def __init__(self, keys: list[str], values: tuple[Any, ...]):
+        self._keys = keys
+        self._values = values
+        self._map = dict(zip(keys, values))
+
+    def __getitem__(self, key: str | int) -> Any:
+        if isinstance(key, int):
+            return self._values[key]
+        return self._map[key]
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def keys(self):
+        return self._keys
+
+
+class DbCursor:
+    def __init__(self, cursor: Any):
+        self._cursor = cursor
+        self.lastrowid = getattr(cursor, "lastrowid", None)
+
+    def _keys(self) -> list[str]:
+        desc = getattr(self._cursor, "description", None) or ()
+        return [col[0] for col in desc]
+
+    def _wrap(self, row: Any) -> DbRow | None:
+        if row is None:
+            return None
+        if isinstance(row, sqlite3.Row):
+            return row  # type: ignore[return-value]
+        keys = self._keys()
+        if isinstance(row, dict):
+            return DbRow(list(row.keys()), tuple(row.values()))
+        return DbRow(keys, tuple(row))
+
+    def fetchone(self) -> DbRow | None:
+        return self._wrap(self._cursor.fetchone())
+
+    def fetchall(self) -> list[DbRow]:
+        return [self._wrap(r) for r in self._cursor.fetchall() if r is not None]  # type: ignore[misc]
+
+    def __iter__(self):
+        for row in self._cursor:
+            wrapped = self._wrap(row)
+            if wrapped is not None:
+                yield wrapped
+
+
+class DbConn:
+    def __init__(self, conn: Any, *, remote: bool = False):
+        self._conn = conn
+        self.remote = remote
+
+    def execute(self, sql: str, params: Any = ()) -> DbCursor:
+        if params == ():
+            cur = self._conn.execute(sql)
+        else:
+            cur = self._conn.execute(sql, params)
+        return DbCursor(cur)
+
+    def executescript(self, sql: str) -> None:
+        if hasattr(self._conn, "executescript"):
+            self._conn.executescript(sql)
+            return
+        for stmt in sql.split(";"):
+            chunk = stmt.strip()
+            if chunk:
+                self._conn.execute(chunk)
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def close(self) -> None:
+        self._conn.close()
+
+
+def connect_db() -> DbConn | sqlite3.Connection:
+    if use_turso():
+        if libsql is None:
+            raise RuntimeError("TURSO_* is set but the libsql package is not installed")
+        raw = libsql.connect(
+            os.environ["TURSO_DATABASE_URL"],
+            auth_token=os.environ["TURSO_AUTH_TOKEN"],
+        )
+        return DbConn(raw, remote=True)
+
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def get_db():
     if "db" not in g:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = connect_db()
     return g.db
 
 
@@ -134,8 +242,7 @@ def close_db(_exc: BaseException | None = None) -> None:
 
 
 def init_db() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(DB_PATH)
+    db = connect_db()
     db.executescript(
         """
         CREATE TABLE IF NOT EXISTS users (
@@ -251,7 +358,7 @@ def next_chore_due(recurrence: str, weekday: int | None, from_day: date | None =
     return None
 
 
-def chore_row(r: sqlite3.Row) -> dict:
+def chore_row(r: Any) -> dict:
     keys = r.keys()
     return {
         "id": r["id"],

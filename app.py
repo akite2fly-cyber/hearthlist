@@ -202,10 +202,61 @@ def init_db() -> None:
             created_at TEXT NOT NULL,
             FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            expires_at TEXT NOT NULL,
+            used INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
         """
     )
     db.commit()
     db.close()
+
+
+def public_base_url() -> str:
+    return (os.environ.get("BASE_URL") or request.url_root).rstrip("/")
+
+
+def create_reset_token(user_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    expires = (utc_now() + timedelta(hours=1)).isoformat(timespec="seconds").replace("+00:00", "Z")
+    db = get_db()
+    db.execute(
+        "UPDATE password_reset_tokens SET used = 1 WHERE user_id = ? AND used = 0",
+        (user_id,),
+    )
+    db.execute(
+        """
+        INSERT INTO password_reset_tokens (user_id, token, expires_at, used, created_at)
+        VALUES (?, ?, ?, 0, ?)
+        """,
+        (user_id, token, expires, utc_now_iso()),
+    )
+    db.commit()
+    return token
+
+
+def valid_reset_token(token: str):
+    row = get_db().execute(
+        """
+        SELECT t.*, u.email, u.name
+        FROM password_reset_tokens t
+        JOIN users u ON u.id = t.user_id
+        WHERE t.token = ? AND t.used = 0
+        """,
+        (token,),
+    ).fetchone()
+    if not row:
+        return None
+    expires = parse_iso(row["expires_at"])
+    if not expires or utc_now() > expires:
+        return None
+    return row
 
 
 def invite_code() -> str:
@@ -403,6 +454,68 @@ def login():
     return redirect(nxt)
 
 
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if current_user():
+        return redirect(url_for("home"))
+    if request.method == "GET":
+        return render_template("forgot_password.html")
+
+    email = (request.form.get("email") or "").strip().lower()
+    user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    reset_url = None
+    if user:
+        token = create_reset_token(user["id"])
+        reset_url = public_base_url() + url_for("reset_password", token=token)
+        # Until email/SMTP is configured, show the one-time link on screen
+        # so you can recover access. Keep this private.
+    flash(
+        "If that email is registered, you can reset your password below.",
+        "ok",
+    )
+    return render_template(
+        "forgot_password.html",
+        submitted=True,
+        reset_url=reset_url,
+        email=email,
+    )
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token: str):
+    if current_user():
+        return redirect(url_for("home"))
+    row = valid_reset_token(token)
+    if not row:
+        flash("That reset link is invalid or expired. Request a new one.", "error")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "GET":
+        return render_template("reset_password.html", token=token, email=row["email"])
+
+    password = request.form.get("password") or ""
+    confirm = request.form.get("confirm") or ""
+    if len(password) < 6:
+        flash("Password must be at least 6 characters.", "error")
+        return render_template("reset_password.html", token=token, email=row["email"]), 400
+    if password != confirm:
+        flash("Passwords do not match.", "error")
+        return render_template("reset_password.html", token=token, email=row["email"]), 400
+
+    db = get_db()
+    db.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(password), row["user_id"]),
+    )
+    db.execute(
+        "UPDATE password_reset_tokens SET used = 1 WHERE id = ?",
+        (row["id"],),
+    )
+    db.commit()
+    flash("Password updated. Sign in with your new password.", "ok")
+    return redirect(url_for("login"))
+
+
 @app.get("/logout")
 def logout():
     session.clear()
@@ -492,6 +605,31 @@ def home(household, user):
 def account(household, user):
     status = plan_status(household)
     return render_template("account.html", household=household, user=user, status=status)
+
+
+@app.post("/account/password")
+@login_required
+@require_household
+def change_password(household, user):
+    current = request.form.get("current_password") or ""
+    new_password = request.form.get("new_password") or ""
+    confirm = request.form.get("confirm_password") or ""
+    if not check_password_hash(user["password_hash"], current):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("account"))
+    if len(new_password) < 6:
+        flash("New password must be at least 6 characters.", "error")
+        return redirect(url_for("account"))
+    if new_password != confirm:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("account"))
+    get_db().execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(new_password), user["id"]),
+    )
+    get_db().commit()
+    flash("Password changed.", "ok")
+    return redirect(url_for("account"))
 
 
 @app.get("/join/<code>")

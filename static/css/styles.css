@@ -649,8 +649,21 @@ a {
 
 .account-grid {
   display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+.reset-box {
+  background: rgba(31, 77, 58, 0.1);
+  border: 1px solid rgba(31, 77, 58, 0.2);
+  border-radius: 16px;
+  padding: 1rem;
+  margin: 0.5rem 0 1rem;
+  word-break: break-all;
+}
+
+.reset-link {
+  font-weight: 700;
 }
 
 .account-card {

@@ -28,6 +28,22 @@
     </ul>
   </article>
 
+  <article class="account-card">
+    <h2>Change password</h2>
+    <form method="post" action="{{ url_for('change_password') }}" class="auth-form">
+      <label>Current password
+        <input type="password" name="current_password" required autocomplete="current-password" />
+      </label>
+      <label>New password
+        <input type="password" name="new_password" required minlength="6" autocomplete="new-password" />
+      </label>
+      <label>Confirm new password
+        <input type="password" name="confirm_password" required minlength="6" autocomplete="new-password" />
+      </label>
+      <button class="btn btn-primary" type="submit">Update password</button>
+    </form>
+  </article>
+
   <article class="account-card account-card--photo">
     <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80" alt="Warm home interior" />
     <div>

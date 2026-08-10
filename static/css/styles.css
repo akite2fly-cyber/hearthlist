@@ -815,6 +815,47 @@ a {
   font-size: 1.35rem;
 }
 
+.chore-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.chore-group-icon,
+.chore-task-icon {
+  font-style: normal;
+}
+
+.chore-color-0 { --chore-tint: #d9f2e5; --chore-ink: #1f4d3a; --chore-accent: #2f6b4f; }
+.chore-color-1 { --chore-tint: #ffe8d6; --chore-ink: #8a3b12; --chore-accent: #c45c26; }
+.chore-color-2 { --chore-tint: #e3eefc; --chore-ink: #1d3f73; --chore-accent: #3b6ea8; }
+.chore-color-3 { --chore-tint: #f3e6ff; --chore-ink: #5a2d82; --chore-accent: #7a45a8; }
+.chore-color-4 { --chore-tint: #fff3bf; --chore-ink: #6b5200; --chore-accent: #c9a227; }
+.chore-color-5 { --chore-tint: #ffe0e6; --chore-ink: #7a2436; --chore-accent: #c44569; }
+
+.chore-group.chore-color-0,
+.chore-group.chore-color-1,
+.chore-group.chore-color-2,
+.chore-group.chore-color-3,
+.chore-group.chore-color-4,
+.chore-group.chore-color-5 {
+  background: var(--chore-tint);
+  border-color: rgba(28, 42, 36, 0.12);
+}
+
+.chore-group.chore-color-0 .chore-group-name,
+.chore-group.chore-color-1 .chore-group-name,
+.chore-group.chore-color-2 .chore-group-name,
+.chore-group.chore-color-3 .chore-group-name,
+.chore-group.chore-color-4 .chore-group-name,
+.chore-group.chore-color-5 .chore-group-name {
+  color: var(--chore-ink);
+}
+
+.chore-print-calendar {
+  display: none;
+}
+
 .chore-group-count {
   font-size: 0.82rem;
   font-weight: 700;

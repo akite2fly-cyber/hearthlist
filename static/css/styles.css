@@ -783,6 +783,49 @@ a {
   padding: 1.25rem 0 0.75rem;
 }
 
+.panel-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.chore-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.chore-group {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 0.85rem 0.9rem 0.35rem;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.chore-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.chore-group-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.chore-group-count {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.chore-print-box,
+.print-only {
+  display: none;
+}
+
 .app-title {
   font-size: clamp(1.8rem, 4vw, 2.4rem);
 }
@@ -1282,5 +1325,124 @@ a {
 
   .hero {
     min-height: unset;
+  }
+}
+
+@media print {
+  body {
+    background: white !important;
+    color: #111;
+  }
+
+  .flash-wrap,
+  .site-nav,
+  .tabs,
+  .no-print,
+  .panel-thumb,
+  .panel-head-actions,
+  .app-top-actions,
+  .app-hero-band,
+  .banner,
+  .auth-photo,
+  .mobile-cta,
+  #reminder-popup,
+  #meal-editor,
+  #panel-groceries,
+  #panel-meals,
+  #panel-reminders,
+  #panel-people {
+    display: none !important;
+  }
+
+  .page-app {
+    width: 100%;
+    margin: 0;
+    max-width: none;
+  }
+
+  .app-top {
+    padding: 0 0 0.75rem;
+    border-bottom: 2px solid #111;
+    margin-bottom: 1rem;
+  }
+
+  .eyebrow {
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .eyebrow::after {
+    content: " · Chore chart";
+  }
+
+  .app-title {
+    font-size: 1.75rem;
+  }
+
+  #panel-chores {
+    display: block !important;
+  }
+
+  .panel-head .hint {
+    display: none;
+  }
+
+  .chore-groups {
+    gap: 1.25rem;
+  }
+
+  .chore-group {
+    break-inside: avoid;
+    border: 2px solid #222;
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem 0.5rem;
+    background: white;
+    margin-bottom: 0.75rem;
+  }
+
+  .chore-group-name {
+    font-size: 1.6rem;
+  }
+
+  .chore-group-count {
+    display: none;
+  }
+
+  .chore-group-list li {
+    grid-template-columns: 1.35rem 1fr;
+    gap: 0.65rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px dashed #bbb;
+    align-items: center;
+  }
+
+  .chore-group-list li:last-child {
+    border-bottom: 0;
+  }
+
+  .chore-group-list .item-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  .chore-group-list .item-meta {
+    font-size: 0.9rem;
+  }
+
+  .print-only,
+  .chore-print-box {
+    display: inline-block !important;
+  }
+
+  .chore-print-box {
+    width: 1.15rem;
+    height: 1.15rem;
+    border: 2px solid #222;
+    border-radius: 3px;
+  }
+
+  body.printing-chores .item-list li.is-done .item-title {
+    text-decoration: none;
+    opacity: 1;
   }
 }

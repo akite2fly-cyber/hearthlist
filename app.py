@@ -174,6 +174,22 @@ if stripe and os.environ.get("STRIPE_SECRET_KEY"):
     stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 
+def static_asset(filename: str) -> str:
+    """URL for a static file with a cache-busting query based on file mtime."""
+    url = url_for("static", filename=filename)
+    path = Path(app.static_folder or "static") / filename
+    try:
+        version = int(path.stat().st_mtime)
+    except OSError:
+        version = 1
+    return f"{url}?v={version}"
+
+
+@app.context_processor
+def inject_static_asset():
+    return {"static_asset": static_asset}
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 

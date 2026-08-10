@@ -607,7 +607,8 @@ function buildPrintCalendar(items) {
     }
     const num = el("div", "chore-cal-daynum", String(day.getDate()));
     cell.appendChild(num);
-    const dayItems = choresForCalendarDay(items, day).slice(0, 4);
+    const allDayItems = choresForCalendarDay(items, day);
+    const dayItems = allDayItems.slice(0, 3);
     for (const item of dayItems) {
       const who = (item.assignee || "").trim() || "Unassigned";
       const row = el(
@@ -620,11 +621,13 @@ function buildPrintCalendar(items) {
       );
       cell.appendChild(row);
     }
-    if (choresForCalendarDay(items, day).length > 4) {
+    if (allDayItems.length > 3) {
       cell.appendChild(el("div", "chore-cal-more", "+ more"));
     }
     grid.appendChild(cell);
   }
+  const weekRows = Math.max(4, Math.ceil(cells.length / 7));
+  grid.style.setProperty("--week-rows", String(weekRows));
   root.appendChild(grid);
 
   const footer = el("footer", "chore-cal-footer");

@@ -23,9 +23,14 @@
     </p>
     <ul class="plain-list">
       <li>Members: {{ status.member_count }} / {{ status.member_limit }}</li>
-      <li>Household: {{ household.name }}</li>
       <li>Invite code: <strong>{{ household.invite_code }}</strong></li>
     </ul>
+    <form method="post" action="{{ url_for('rename_household') }}" class="auth-form" style="margin-top:1rem">
+      <label>Household name
+        <input type="text" name="household_name" value="{{ household.name }}" required maxlength="80" autocomplete="organization" />
+      </label>
+      <button class="btn btn-ghost" type="submit">Save name</button>
+    </form>
   </article>
 
   <article class="account-card">

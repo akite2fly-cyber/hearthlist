@@ -824,6 +824,26 @@ def account(household, user):
     return render_template("account.html", household=household, user=user, status=status)
 
 
+@app.post("/account/household-name")
+@login_required
+@require_household
+def rename_household(household, user):
+    name = (request.form.get("household_name") or "").strip()
+    if not name:
+        flash("Household name can’t be empty.", "error")
+        return redirect(url_for("account"))
+    if len(name) > 80:
+        flash("Keep the household name under 80 characters.", "error")
+        return redirect(url_for("account"))
+    get_db().execute(
+        "UPDATE households SET name = ? WHERE id = ?",
+        (name, household["id"]),
+    )
+    get_db().commit()
+    flash("Household name updated.", "ok")
+    return redirect(url_for("account"))
+
+
 @app.post("/account/password")
 @login_required
 @require_household

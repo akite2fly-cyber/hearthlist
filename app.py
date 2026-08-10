@@ -104,7 +104,39 @@ def resolve_db_path() -> Path:
 
 
 def use_turso() -> bool:
-    return bool(os.environ.get("TURSO_DATABASE_URL") and os.environ.get("TURSO_AUTH_TOKEN"))
+    url, token = _raw_turso_env()
+    return bool(url and token)
+
+
+def _raw_turso_env() -> tuple[str, str]:
+    url = (os.environ.get("TURSO_DATABASE_URL") or "").strip().strip('"').strip("'")
+    token = (os.environ.get("TURSO_AUTH_TOKEN") or "").strip().strip('"').strip("'")
+    return url, token
+
+
+def turso_credentials() -> tuple[str, str]:
+    """Return cleaned Turso URL + JWT, or raise a clear config error."""
+    url, token = _raw_turso_env()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    # Accidental "url   token" paste into the token field
+    if "eyJ" in token and not token.startswith("eyJ"):
+        token = token[token.index("eyJ") :].split()[0].strip()
+    if "://" in token or token.startswith("libsql"):
+        raise RuntimeError(
+            "TURSO_AUTH_TOKEN looks like a database URL. "
+            "Use libsql://… for TURSO_DATABASE_URL and the eyJ… token for TURSO_AUTH_TOKEN."
+        )
+    if not token.startswith("eyJ") or token.count(".") < 2:
+        raise RuntimeError(
+            "TURSO_AUTH_TOKEN must be the JWT that starts with eyJ. "
+            "Delete it in Render, re-add, and paste only the token (no spaces or labels)."
+        )
+    if not url.startswith(("libsql://", "https://")):
+        raise RuntimeError(
+            "TURSO_DATABASE_URL must start with libsql:// (from the Turso dashboard)."
+        )
+    return url, token
 
 
 DB_PATH = resolve_db_path()
@@ -215,10 +247,8 @@ def connect_db() -> DbConn | sqlite3.Connection:
     if use_turso():
         if libsql is None:
             raise RuntimeError("TURSO_* is set but the libsql package is not installed")
-        raw = libsql.connect(
-            os.environ["TURSO_DATABASE_URL"],
-            auth_token=os.environ["TURSO_AUTH_TOKEN"],
-        )
+        url, token = turso_credentials()
+        raw = libsql.connect(url, auth_token=token)
         return DbConn(raw, remote=True)
 
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)

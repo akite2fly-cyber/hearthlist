@@ -1329,9 +1329,14 @@ a {
 }
 
 @media print {
+  @page {
+    size: landscape;
+    margin: 0.4in;
+  }
+
   body {
-    background: white !important;
-    color: #111;
+    background: #fffaf2 !important;
+    color: #1c2a24;
   }
 
   .flash-wrap,
@@ -1345,6 +1350,8 @@ a {
   .banner,
   .auth-photo,
   .mobile-cta,
+  .chore-groups,
+  .panel-head,
   #reminder-popup,
   #meal-editor,
   #panel-groceries,
@@ -1361,88 +1368,142 @@ a {
   }
 
   .app-top {
-    padding: 0 0 0.75rem;
-    border-bottom: 2px solid #111;
-    margin-bottom: 1rem;
-  }
-
-  .eyebrow {
-    font-size: 1rem;
-    font-weight: 700;
-  }
-
-  .eyebrow::after {
-    content: " · Chore chart";
-  }
-
-  .app-title {
-    font-size: 1.75rem;
+    display: none !important;
   }
 
   #panel-chores {
     display: block !important;
   }
 
-  .panel-head .hint {
-    display: none;
+  body.printing-chores .chore-print-calendar {
+    display: block !important;
   }
 
-  .chore-groups {
-    gap: 1.25rem;
+  .chore-print-calendar[hidden] {
+    display: block !important;
   }
 
-  .chore-group {
-    break-inside: avoid;
-    border: 2px solid #222;
-    border-radius: 12px;
-    padding: 0.75rem 0.85rem 0.5rem;
-    background: white;
-    margin-bottom: 0.75rem;
+  .chore-cal-header {
+    text-align: center;
+    margin-bottom: 0.55rem;
   }
 
-  .chore-group-name {
-    font-size: 1.6rem;
+  .chore-cal-kicker {
+    margin: 0;
+    font-weight: 700;
+    color: #1f4d3a;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.78rem;
   }
 
-  .chore-group-count {
-    display: none;
+  .chore-cal-title {
+    margin: 0.15rem 0;
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    color: #1c2a24;
   }
 
-  .chore-group-list li {
-    grid-template-columns: 1.35rem 1fr;
-    gap: 0.65rem;
-    padding: 0.55rem 0;
-    border-bottom: 1px dashed #bbb;
+  .chore-cal-sub {
+    margin: 0;
+    color: #5a6b63;
+    font-size: 0.9rem;
+  }
+
+  .chore-cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    justify-content: center;
+    margin: 0.55rem 0 0.75rem;
+  }
+
+  .chore-cal-chip {
+    display: inline-flex;
     align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    background: var(--chore-tint);
+    color: var(--chore-ink);
+    border: 1px solid color-mix(in srgb, var(--chore-accent) 40%, white);
   }
 
-  .chore-group-list li:last-child {
-    border-bottom: 0;
+  .chore-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.28rem;
   }
 
-  .chore-group-list .item-title {
-    font-size: 1.15rem;
+  .chore-cal-dow {
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #1f4d3a;
+    padding: 0.2rem;
+  }
+
+  .chore-cal-day {
+    min-height: 1.55in;
+    border: 1.5px solid #d7cfc0;
+    border-radius: 10px;
+    padding: 0.28rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(255, 250, 242, 0.9));
+    break-inside: avoid;
+  }
+
+  .chore-cal-day.is-empty {
+    background: #f3efe6;
+    border-style: dashed;
+    opacity: 0.55;
+  }
+
+  .chore-cal-daynum {
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1f4d3a;
+    margin-bottom: 0.2rem;
+  }
+
+  .chore-cal-entry {
+    display: grid;
+    grid-template-columns: 0.7rem 1fr;
+    gap: 0.28rem;
+    align-items: start;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    margin-bottom: 0.18rem;
+    padding: 0.15rem 0.2rem;
+    border-radius: 6px;
+    background: var(--chore-tint);
+    color: var(--chore-ink);
+  }
+
+  .chore-cal-check {
+    width: 0.62rem;
+    height: 0.62rem;
+    border: 1.5px solid var(--chore-accent);
+    border-radius: 2px;
+    margin-top: 0.08rem;
+    background: white;
+  }
+
+  .chore-cal-entry-text {
     font-weight: 700;
   }
 
-  .chore-group-list .item-meta {
-    font-size: 0.9rem;
+  .chore-cal-more {
+    font-size: 0.58rem;
+    color: #5a6b63;
+    font-weight: 700;
   }
 
   .print-only,
   .chore-print-box {
-    display: inline-block !important;
-  }
-
-  .chore-print-box {
-    width: 1.15rem;
-    height: 1.15rem;
-    border: 2px solid #222;
-    border-radius: 3px;
-  }
-
-  body.printing-chores .item-list li.is-done .item-title {
-    text-decoration: none;
-    opacity: 1;
+    display: none !important;
   }
 }

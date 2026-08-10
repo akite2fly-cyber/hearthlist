@@ -349,6 +349,7 @@ async function loadChores() {
   const groupsEl = document.getElementById("chore-groups");
   if (!groupsEl) return;
   const data = await api("/api/chores");
+  window.__hearthlistChores = data.items || [];
   groupsEl.innerHTML = "";
 
   const items = data.items || [];
@@ -378,9 +379,14 @@ async function loadChores() {
     const openCount = groupItems.filter((i) => !i.done).length;
     const section = el("section", "chore-group");
     section.dataset.assignee = name;
+    const colorIdx = assigneeColorIndex(name);
+    section.classList.add(`chore-color-${colorIdx}`);
 
     const head = el("div", "chore-group-head");
-    head.appendChild(el("h3", "chore-group-name", name));
+    const titleWrap = el("div", "chore-group-title");
+    titleWrap.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
+    titleWrap.appendChild(el("h3", "chore-group-name", name));
+    head.appendChild(titleWrap);
     head.appendChild(
       el("span", "chore-group-count", openCount ? `${openCount} open` : "All done")
     );
@@ -393,6 +399,30 @@ async function loadChores() {
     section.appendChild(list);
     groupsEl.appendChild(section);
   }
+}
+
+function assigneeColorIndex(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i) * (i + 1)) % 6;
+  return hash;
+}
+
+function chorePersonIcon(name) {
+  const icons = ["⭐", "🌈", "🍀", "🌞", "🎈", "🧩"];
+  return icons[assigneeColorIndex(name)];
+}
+
+function choreTaskIcon(title) {
+  const t = (title || "").toLowerCase();
+  if (/trash|garbage|recycle|bin/.test(t)) return "🗑️";
+  if (/dish|sink|kitchen/.test(t)) return "🍽️";
+  if (/vacuum|sweep|mop|floor|dust/.test(t)) return "🧹";
+  if (/bed|room/.test(t)) return "🛏️";
+  if (/laundry|wash|clothes/.test(t)) return "👕";
+  if (/dog|cat|pet|feed/.test(t)) return "🐾";
+  if (/lawn|yard|plant|garden/.test(t)) return "🌿";
+  if (/homework|study|read/.test(t)) return "📚";
+  return "✓";
 }
 
 function buildChoreRow(item) {
@@ -411,7 +441,10 @@ function buildChoreRow(item) {
   printBox.setAttribute("aria-hidden", "true");
 
   const body = el("div");
-  body.appendChild(el("div", "item-title", item.title));
+  const titleLine = el("div", "item-title");
+  titleLine.appendChild(el("span", "chore-task-icon", choreTaskIcon(item.title)));
+  titleLine.appendChild(document.createTextNode(` ${item.title}`));
+  body.appendChild(titleLine);
   const bits = [];
   if (item.due_date) bits.push(`Due ${item.due_date}`);
   if (item.recurrence === "daily") bits.push("Every day");
@@ -420,6 +453,7 @@ function buildChoreRow(item) {
       item.recurrence_weekday != null ? WEEKDAY_NAMES[item.recurrence_weekday] : "week";
     bits.push(`Every ${day}`);
   }
+  if (item.recurrence === "monthly") bits.push("Every month");
   if (bits.length) body.appendChild(el("div", "item-meta", bits.join(" · ")));
 
   const remove = el("button", "item-remove no-print", "×");
@@ -447,29 +481,149 @@ function updateAssigneeSuggestions(names) {
 function householdNameForPrint() {
   return (
     document.getElementById("invite-card")?.dataset.householdName ||
-    document.querySelector(".app-title")?.textContent?.trim() ||
+    document.querySelector(".eyebrow")?.textContent?.trim() ||
     "Our home"
   );
 }
 
+function monthMatrix(year, monthIndex) {
+  // Monday-first calendar grid
+  const first = new Date(year, monthIndex, 1);
+  const startOffset = (first.getDay() + 6) % 7; // Mon=0
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(year, monthIndex, d));
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
+}
+
+function localISODate(dayDate) {
+  const y = dayDate.getFullYear();
+  const m = String(dayDate.getMonth() + 1).padStart(2, "0");
+  const d = String(dayDate.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function choresForCalendarDay(items, dayDate) {
+  const iso = localISODate(dayDate);
+  const weekday = (dayDate.getDay() + 6) % 7; // Mon=0
+  const dayNum = dayDate.getDate();
+  const matches = [];
+  for (const item of items) {
+    const rec = item.recurrence || "none";
+    if (rec === "daily") {
+      matches.push(item);
+      continue;
+    }
+    if (rec === "weekly") {
+      const target =
+        item.recurrence_weekday != null ? Number(item.recurrence_weekday) : weekday;
+      if (target === weekday) matches.push(item);
+      continue;
+    }
+    if (rec === "monthly") {
+      let dueDay = dayNum;
+      if (item.due_date) {
+        const parts = String(item.due_date).split("-");
+        dueDay = Number(parts[2]) || dayNum;
+      }
+      if (dueDay === dayNum) matches.push(item);
+      continue;
+    }
+    if (item.due_date === iso) matches.push(item);
+  }
+  return matches;
+}
+
+function buildPrintCalendar(items) {
+  const root = document.getElementById("chore-print-calendar");
+  if (!root) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const monthIndex = now.getMonth();
+  const monthName = now.toLocaleString(undefined, { month: "long", year: "numeric" });
+  const cells = monthMatrix(year, monthIndex);
+
+  root.innerHTML = "";
+  root.hidden = false;
+
+  const header = el("header", "chore-cal-header");
+  header.appendChild(el("p", "chore-cal-kicker", householdNameForPrint()));
+  header.appendChild(el("h2", "chore-cal-title", `${monthName} chore calendar`));
+  header.appendChild(el("p", "chore-cal-sub", "Check off each day · hang on the fridge"));
+  root.appendChild(header);
+
+  // Legend by person
+  const people = [
+    ...new Set(items.map((i) => (i.assignee || "").trim() || "Unassigned")),
+  ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  const legend = el("div", "chore-cal-legend");
+  for (const name of people) {
+    const chip = el("span", `chore-cal-chip chore-color-${assigneeColorIndex(name)}`);
+    chip.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
+    chip.appendChild(document.createTextNode(` ${name}`));
+    legend.appendChild(chip);
+  }
+  root.appendChild(legend);
+
+  const grid = el("div", "chore-cal-grid");
+  ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((d) => {
+    grid.appendChild(el("div", "chore-cal-dow", d));
+  });
+
+  for (const day of cells) {
+    const cell = el("div", day ? "chore-cal-day" : "chore-cal-day is-empty");
+    if (!day) {
+      grid.appendChild(cell);
+      continue;
+    }
+    const num = el("div", "chore-cal-daynum", String(day.getDate()));
+    cell.appendChild(num);
+    const dayItems = choresForCalendarDay(items, day).slice(0, 4);
+    for (const item of dayItems) {
+      const who = (item.assignee || "").trim() || "Unassigned";
+      const row = el(
+        "div",
+        `chore-cal-entry chore-color-${assigneeColorIndex(who)}`
+      );
+      row.appendChild(el("span", "chore-cal-check", ""));
+      row.appendChild(
+        el("span", "chore-cal-entry-text", `${choreTaskIcon(item.title)} ${item.title}`)
+      );
+      cell.appendChild(row);
+    }
+    if (choresForCalendarDay(items, day).length > 4) {
+      cell.appendChild(el("div", "chore-cal-more", "+ more"));
+    }
+    grid.appendChild(cell);
+  }
+  root.appendChild(grid);
+}
+
 function printChoreChart() {
-  const groupsEl = document.getElementById("chore-groups");
-  if (!groupsEl || !groupsEl.querySelector(".chore-group")) {
+  const items = window.__hearthlistChores || [];
+  if (!items.length) {
     alert("Add a few chores (with names in Who?) before printing.");
     return;
   }
+  buildPrintCalendar(items);
   document.body.classList.add("printing-chores");
   const title = document.title;
-  document.title = `${householdNameForPrint()} chore chart`;
+  document.title = `${householdNameForPrint()} chore calendar`;
   const cleanup = () => {
     document.body.classList.remove("printing-chores");
     document.title = title;
+    const cal = document.getElementById("chore-print-calendar");
+    if (cal) {
+      cal.hidden = true;
+      cal.innerHTML = "";
+    }
     window.removeEventListener("afterprint", cleanup);
   };
   window.addEventListener("afterprint", cleanup);
   window.print();
-  // Fallback if afterprint never fires (some mobile browsers)
-  setTimeout(cleanup, 1000);
+  setTimeout(cleanup, 1500);
 }
 
 document.getElementById("print-chores")?.addEventListener("click", printChoreChart);

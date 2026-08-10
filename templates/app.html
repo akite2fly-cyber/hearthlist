@@ -71,7 +71,7 @@
         <p class="hint">Grouped by who does them — print a chart for the fridge.</p>
       </div>
       <div class="panel-head-actions">
-        <button type="button" class="btn btn-ghost" id="print-chores">Print chore chart</button>
+        <button type="button" class="btn btn-ghost" id="print-chores">Print month calendar</button>
         <img class="panel-thumb" src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80" alt="" />
       </div>
     </div>
@@ -84,6 +84,7 @@
         <option value="none">One time</option>
         <option value="daily">Every day</option>
         <option value="weekly">Every week</option>
+        <option value="monthly">Every month</option>
       </select>
       <select id="chore-weekday" title="Weekday" hidden>
         <option value="0">Monday</option>
@@ -97,6 +98,7 @@
       <button class="btn btn-primary" type="submit">Add chore</button>
     </form>
     <div id="chore-groups" class="chore-groups"></div>
+    <div id="chore-print-calendar" class="chore-print-calendar print-only" hidden aria-hidden="true"></div>
   </section>
 
   <section class="panel" id="panel-reminders" role="tabpanel" hidden>

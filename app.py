@@ -484,6 +484,20 @@ def next_chore_due(recurrence: str, weekday: int | None, from_day: date | None =
         if days_ahead == 0:
             days_ahead = 7
         return (base + timedelta(days=days_ahead)).isoformat()
+    if recurrence == "monthly":
+        year = base.year
+        month = base.month + 1
+        if month > 12:
+            month = 1
+            year += 1
+        day = base.day
+        # Clamp to last day of next month
+        if month == 12:
+            last = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last = date(year, month + 1, 1) - timedelta(days=1)
+        day = min(day, last.day)
+        return date(year, month, day).isoformat()
     return None
 
 
@@ -1298,8 +1312,8 @@ def api_chores_create():
     assignee = (payload.get("assignee") or "").strip()[:80]
     due_date = (payload.get("due_date") or "").strip() or None
     recurrence = (payload.get("recurrence") or "none").strip().lower()
-    if recurrence not in ("none", "daily", "weekly"):
-        return jsonify({"error": "recurrence must be none, daily, or weekly"}), 400
+    if recurrence not in ("none", "daily", "weekly", "monthly"):
+        return jsonify({"error": "recurrence must be none, daily, weekly, or monthly"}), 400
     recurrence_weekday = payload.get("recurrence_weekday")
     if recurrence == "weekly":
         try:
@@ -1317,7 +1331,7 @@ def api_chores_create():
             date.fromisoformat(due_date)
         except ValueError:
             return jsonify({"error": "Invalid due date"}), 400
-    elif recurrence in ("daily", "weekly"):
+    elif recurrence in ("daily", "weekly", "monthly"):
         due_date = date.today().isoformat()
         if recurrence == "weekly":
             # Align first due date to chosen weekday
@@ -1387,7 +1401,7 @@ def api_chores_update(chore_id: int):
         due_date = str(payload["due_date"]).strip() or None
     if "recurrence" in payload:
         recurrence = str(payload["recurrence"]).strip().lower()
-        if recurrence not in ("none", "daily", "weekly"):
+        if recurrence not in ("none", "daily", "weekly", "monthly"):
             return jsonify({"error": "invalid recurrence"}), 400
     if "recurrence_weekday" in payload and payload["recurrence_weekday"] is not None:
         try:
@@ -1397,7 +1411,7 @@ def api_chores_update(chore_id: int):
 
     if "done" in payload:
         marking_done = bool(payload["done"])
-        if marking_done and recurrence in ("daily", "weekly"):
+        if marking_done and recurrence in ("daily", "weekly", "monthly"):
             # Recurring: roll forward instead of staying checked forever
             done = 0
             due_date = next_chore_due(recurrence, recurrence_weekday, date.today())

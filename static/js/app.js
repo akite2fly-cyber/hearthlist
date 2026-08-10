@@ -98,6 +98,188 @@ function weekdayLabel(iso) {
   return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "short" });
 }
 
+const MEAL_TYPE_LABELS = {
+  breakfast: "Breakfast",
+  lunch: "Lunch",
+  dinner: "Dinner",
+};
+
+let mealEditorState = null;
+
+function mealEditorEls() {
+  return {
+    root: document.getElementById("meal-editor"),
+    form: document.getElementById("meal-editor-form"),
+    meta: document.getElementById("meal-editor-meta"),
+    title: document.getElementById("meal-editor-title"),
+    url: document.getElementById("meal-editor-url"),
+    openLink: document.getElementById("meal-editor-open-link"),
+    list: document.getElementById("meal-ingredient-list"),
+    status: document.getElementById("meal-editor-status"),
+  };
+}
+
+function setMealEditorStatus(message) {
+  const { status } = mealEditorEls();
+  if (status) status.textContent = message || "";
+}
+
+function syncMealOpenLink() {
+  const { url, openLink } = mealEditorEls();
+  if (!url || !openLink) return;
+  const value = url.value.trim();
+  if (value) {
+    const href = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    openLink.href = href;
+    openLink.hidden = false;
+  } else {
+    openLink.hidden = true;
+    openLink.removeAttribute("href");
+  }
+}
+
+function collectMealIngredients() {
+  const { list } = mealEditorEls();
+  if (!list) return [];
+  const items = [];
+  for (const row of list.querySelectorAll(".meal-ingredient-row")) {
+    const name = row.querySelector(".ing-name")?.value.trim() || "";
+    const qty = row.querySelector(".ing-qty")?.value.trim() || "";
+    if (name) items.push({ name, qty });
+  }
+  return items;
+}
+
+function addMealIngredientRow(item = { name: "", qty: "" }, checked = true) {
+  const { list } = mealEditorEls();
+  if (!list) return;
+  const li = el("li", "meal-ingredient-row");
+  const check = document.createElement("input");
+  check.type = "checkbox";
+  check.checked = checked;
+  check.className = "ing-check";
+  check.title = "Add to groceries";
+  const name = document.createElement("input");
+  name.type = "text";
+  name.className = "ing-name";
+  name.placeholder = "Ingredient";
+  name.maxLength = 120;
+  name.value = item.name || "";
+  const qty = document.createElement("input");
+  qty.type = "text";
+  qty.className = "ing-qty qty";
+  qty.placeholder = "Qty";
+  qty.maxLength = 40;
+  qty.value = item.qty || "";
+  const remove = el("button", "item-remove", "×");
+  remove.type = "button";
+  remove.setAttribute("aria-label", "Remove ingredient");
+  remove.addEventListener("click", () => li.remove());
+  li.append(check, name, qty, remove);
+  list.appendChild(li);
+  if (!item.name) name.focus();
+}
+
+function closeMealEditor() {
+  const { root, form } = mealEditorEls();
+  if (root) root.hidden = true;
+  mealEditorState = null;
+  setMealEditorStatus("");
+  if (form) form.reset();
+}
+
+function openMealEditor(slot) {
+  const ui = mealEditorEls();
+  if (!ui.root) return;
+  mealEditorState = {
+    date: slot.date,
+    meal_type: slot.meal_type,
+  };
+  const dayLabel = weekdayLabel(slot.date);
+  ui.meta.textContent = `${dayLabel} · ${MEAL_TYPE_LABELS[slot.meal_type] || slot.meal_type}`;
+  ui.title.value = slot.title || "";
+  ui.url.value = slot.recipe_url || "";
+  ui.list.innerHTML = "";
+  const ingredients = Array.isArray(slot.ingredients) ? slot.ingredients : [];
+  if (ingredients.length) {
+    for (const item of ingredients) addMealIngredientRow(item, true);
+  } else {
+    addMealIngredientRow({ name: "", qty: "" }, true);
+  }
+  syncMealOpenLink();
+  setMealEditorStatus("");
+  ui.root.hidden = false;
+  ui.title.focus();
+}
+
+async function saveMealEditor() {
+  if (!mealEditorState) return;
+  const ui = mealEditorEls();
+  const title = ui.title.value.trim();
+  const recipe_url = ui.url.value.trim();
+  const ingredients = collectMealIngredients();
+  await api("/api/meals", {
+    method: "PUT",
+    body: JSON.stringify({
+      date: mealEditorState.date,
+      meal_type: mealEditorState.meal_type,
+      title,
+      recipe_url,
+      ingredients,
+      notes: "",
+    }),
+  });
+  closeMealEditor();
+  loadMeals();
+}
+
+async function addCheckedIngredientsToGroceries() {
+  const { list } = mealEditorEls();
+  if (!list) return;
+  const names = [];
+  for (const row of list.querySelectorAll(".meal-ingredient-row")) {
+    const checked = row.querySelector(".ing-check")?.checked;
+    const name = row.querySelector(".ing-name")?.value.trim() || "";
+    const qty = row.querySelector(".ing-qty")?.value.trim() || "";
+    if (checked && name) {
+      names.push(qty ? `${name} (${qty})` : name);
+    }
+  }
+  if (!names.length) {
+    setMealEditorStatus("Check at least one ingredient first.");
+    return;
+  }
+  // Save current meal so ingredients aren’t lost, then push to groceries.
+  if (mealEditorState) {
+    await api("/api/meals", {
+      method: "PUT",
+      body: JSON.stringify({
+        date: mealEditorState.date,
+        meal_type: mealEditorState.meal_type,
+        title: mealEditorEls().title.value.trim(),
+        recipe_url: mealEditorEls().url.value.trim(),
+        ingredients: collectMealIngredients(),
+        notes: "",
+      }),
+    });
+  }
+  const result = await api("/api/meals/to-groceries", {
+    method: "POST",
+    body: JSON.stringify({ names }),
+  });
+  const added = (result.added || []).length;
+  const skipped = (result.skipped || []).length;
+  setMealEditorStatus(
+    added
+      ? `Added ${added} to groceries${skipped ? ` · ${skipped} already on the list` : ""}.`
+      : skipped
+        ? "Those items are already on your grocery list."
+        : "Nothing added."
+  );
+  if (typeof loadGroceries === "function") loadGroceries();
+  loadMeals();
+}
+
 async function loadMeals() {
   const grid = document.getElementById("meals-grid");
   if (!grid) return;
@@ -117,35 +299,51 @@ async function loadMeals() {
   for (const day of data.week) {
     grid.appendChild(el("div", "meal-day", weekdayLabel(day)));
     for (const type of ["breakfast", "lunch", "dinner"]) {
-      const slot = byDate[day][type];
+      const slot = byDate[day]?.[type] || {
+        date: day,
+        meal_type: type,
+        title: "",
+        recipe_url: "",
+        ingredients: [],
+      };
       const btn = el("button", "meal-cell");
       btn.type = "button";
       const title = el("strong", "", slot.title || "Add…");
       btn.appendChild(title);
-      if (slot.notes) btn.appendChild(el("span", "item-meta", slot.notes));
-      btn.addEventListener("click", async () => {
-        const nextTitle = prompt("Meal title", slot.title || "");
-        if (nextTitle == null) return;
-        const nextNotes = prompt("Notes (optional)", slot.notes || "") || "";
-        try {
-          await api("/api/meals", {
-            method: "PUT",
-            body: JSON.stringify({
-              date: day,
-              meal_type: type,
-              title: nextTitle.trim(),
-              notes: nextNotes.trim(),
-            }),
-          });
-          loadMeals();
-        } catch (err) {
-          alert(err.message);
-        }
-      });
+      const cues = el("div", "meal-cell-cues");
+      if (slot.recipe_url) cues.appendChild(el("span", "meal-cue", "Recipe"));
+      const ingCount = Array.isArray(slot.ingredients) ? slot.ingredients.length : 0;
+      if (ingCount) cues.appendChild(el("span", "meal-cue", `${ingCount} items`));
+      if (cues.childNodes.length) btn.appendChild(cues);
+      btn.addEventListener("click", () => openMealEditor(slot));
       grid.appendChild(btn);
     }
   }
 }
+
+document.getElementById("meal-editor-cancel")?.addEventListener("click", closeMealEditor);
+document.getElementById("meal-add-ingredient")?.addEventListener("click", () => {
+  addMealIngredientRow({ name: "", qty: "" }, true);
+});
+document.getElementById("meal-editor-url")?.addEventListener("input", syncMealOpenLink);
+document.getElementById("meal-to-groceries")?.addEventListener("click", async () => {
+  try {
+    await addCheckedIngredientsToGroceries();
+  } catch (err) {
+    setMealEditorStatus(err.message || "Could not update groceries.");
+  }
+});
+document.getElementById("meal-editor-form")?.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await saveMealEditor();
+  } catch (err) {
+    setMealEditorStatus(err.message || "Could not save meal.");
+  }
+});
+document.getElementById("meal-editor")?.addEventListener("click", (e) => {
+  if (e.target.id === "meal-editor") closeMealEditor();
+});
 
 async function loadChores() {
   const list = document.getElementById("chore-list");

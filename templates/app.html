@@ -57,7 +57,7 @@
     <div class="panel-head">
       <div>
         <h2>This week’s meals</h2>
-        <p class="hint">Tap a cell to edit breakfast, lunch, or dinner.</p>
+        <p class="hint">Tap a meal to add a recipe link and ingredients.</p>
       </div>
       <img class="panel-thumb" src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=400&q=80" alt="" />
     </div>
@@ -170,6 +170,38 @@
     <h2 id="reminder-popup-title">Reminder</h2>
     <ul id="reminder-popup-list"></ul>
     <button type="button" class="btn btn-primary" id="reminder-popup-close">Got it</button>
+  </div>
+</div>
+
+<div id="meal-editor" class="meal-editor" hidden>
+  <div class="meal-editor-card" role="dialog" aria-modal="true" aria-labelledby="meal-editor-heading">
+    <header class="meal-editor-top">
+      <div>
+        <p class="eyebrow" id="meal-editor-meta">Meal</p>
+        <h2 id="meal-editor-heading">Edit meal</h2>
+      </div>
+      <button type="button" class="btn btn-ghost" id="meal-editor-cancel">Close</button>
+    </header>
+    <form id="meal-editor-form" class="meal-editor-form">
+      <label>Meal name
+        <input id="meal-editor-title" type="text" maxlength="200" placeholder="Pasta night" autocomplete="off" />
+      </label>
+      <label>Recipe link
+        <input id="meal-editor-url" type="url" maxlength="500" placeholder="https://…" inputmode="url" autocomplete="url" />
+      </label>
+      <a id="meal-editor-open-link" class="meal-editor-open-link" href="#" target="_blank" rel="noopener" hidden>Open recipe</a>
+      <div class="meal-ingredients-head">
+        <h3>Ingredients</h3>
+        <button type="button" class="btn btn-ghost" id="meal-add-ingredient">Add ingredient</button>
+      </div>
+      <ul id="meal-ingredient-list" class="meal-ingredient-list"></ul>
+      <p class="hint">Check items, then add them to groceries — or leave unchecked if you already have them.</p>
+      <div class="meal-editor-actions">
+        <button type="button" class="btn btn-ghost" id="meal-to-groceries">Add checked to groceries</button>
+        <button type="submit" class="btn btn-primary">Save meal</button>
+      </div>
+      <p class="hint" id="meal-editor-status" aria-live="polite"></p>
+    </form>
   </div>
 </div>
 {% endblock %}

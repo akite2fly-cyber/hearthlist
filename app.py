@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import secrets
@@ -352,6 +353,8 @@ def init_db() -> None:
             meal_type TEXT NOT NULL,
             title TEXT NOT NULL DEFAULT '',
             notes TEXT NOT NULL DEFAULT '',
+            recipe_url TEXT NOT NULL DEFAULT '',
+            ingredients TEXT NOT NULL DEFAULT '[]',
             UNIQUE(household_id, meal_date, meal_type),
             FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
         );
@@ -392,13 +395,82 @@ def init_db() -> None:
         """
     )
     # Migrations for older local/prod DBs
-    chore_cols = {row[1] for row in db.execute("PRAGMA table_info(chores)").fetchall()}
+    chore_cols = {
+        str(row[1]).lower() for row in db.execute("PRAGMA table_info(chores)").fetchall()
+    }
     if "recurrence" not in chore_cols:
         db.execute("ALTER TABLE chores ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'none'")
     if "recurrence_weekday" not in chore_cols:
         db.execute("ALTER TABLE chores ADD COLUMN recurrence_weekday INTEGER")
+    meal_cols = {
+        str(row[1]).lower() for row in db.execute("PRAGMA table_info(meal_slots)").fetchall()
+    }
+    if "recipe_url" not in meal_cols:
+        db.execute("ALTER TABLE meal_slots ADD COLUMN recipe_url TEXT NOT NULL DEFAULT ''")
+    if "ingredients" not in meal_cols:
+        db.execute("ALTER TABLE meal_slots ADD COLUMN ingredients TEXT NOT NULL DEFAULT '[]'")
     db.commit()
     db.close()
+
+
+def parse_ingredients(raw: Any) -> list[dict[str, str]]:
+    """Normalize meal ingredients to [{name, qty}, ...]."""
+    items: list[Any]
+    if raw is None or raw == "":
+        items = []
+    elif isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            items = parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            items = []
+    else:
+        items = []
+
+    cleaned: list[dict[str, str]] = []
+    for item in items:
+        if isinstance(item, str):
+            name = item.strip()[:120]
+            qty = ""
+        elif isinstance(item, dict):
+            name = str(item.get("name") or "").strip()[:120]
+            qty = str(item.get("qty") or "").strip()[:40]
+        else:
+            continue
+        if name:
+            cleaned.append({"name": name, "qty": qty})
+    return cleaned[:40]
+
+
+def ingredients_json(items: list[dict[str, str]]) -> str:
+    return json.dumps(items, ensure_ascii=False)
+
+
+def meal_slot_payload(item: Any | None, meal_date: str, meal_type: str) -> dict[str, Any]:
+    if not item:
+        return {
+            "date": meal_date,
+            "meal_type": meal_type,
+            "title": "",
+            "notes": "",
+            "recipe_url": "",
+            "ingredients": [],
+            "id": None,
+        }
+    keys = set(item.keys()) if hasattr(item, "keys") else set()
+    recipe_url = item["recipe_url"] if "recipe_url" in keys and item["recipe_url"] else ""
+    ingredients_raw = item["ingredients"] if "ingredients" in keys else "[]"
+    return {
+        "date": meal_date,
+        "meal_type": meal_type,
+        "title": item["title"] or "",
+        "notes": item["notes"] or "",
+        "recipe_url": recipe_url or "",
+        "ingredients": parse_ingredients(ingredients_raw),
+        "id": item["id"],
+    }
 
 
 def next_chore_due(recurrence: str, weekday: int | None, from_day: date | None = None) -> str | None:
@@ -658,7 +730,14 @@ def login():
     user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     if not user or not check_password_hash(user["password_hash"], password):
         flash("Incorrect email or password.", "error")
-        return render_template("login.html"), 401
+        return (
+            render_template(
+                "login.html",
+                email=email,
+                login_error="Incorrect email or password. Try again, or use Forgot password.",
+            ),
+            401,
+        )
 
     session.clear()
     session["user_id"] = user["id"]
@@ -1056,26 +1135,17 @@ def api_meals_list():
     dates = [d.isoformat() for d in week_dates()]
     rows = get_db().execute(
         """
-        SELECT id, meal_date, meal_type, title, notes
+        SELECT id, meal_date, meal_type, title, notes, recipe_url, ingredients
         FROM meal_slots
         WHERE household_id = ? AND meal_date >= ? AND meal_date <= ?
         """,
         (household["id"], dates[0], dates[-1]),
     ).fetchall()
-    by_key = {(r["meal_date"], r["meal_type"]): dict(r) for r in rows}
+    by_key = {(r["meal_date"], r["meal_type"]): r for r in rows}
     slots = []
     for d in dates:
         for mt in MEAL_TYPES:
-            item = by_key.get((d, mt))
-            slots.append(
-                {
-                    "date": d,
-                    "meal_type": mt,
-                    "title": item["title"] if item else "",
-                    "notes": item["notes"] if item else "",
-                    "id": item["id"] if item else None,
-                }
-            )
+            slots.append(meal_slot_payload(by_key.get((d, mt)), d, mt))
     return jsonify({"week": dates, "slots": slots})
 
 
@@ -1092,6 +1162,10 @@ def api_meals_upsert():
     meal_type = (payload.get("meal_type") or "").strip()
     title = (payload.get("title") or "").strip()[:200]
     notes = (payload.get("notes") or "").strip()[:1000]
+    recipe_url = (payload.get("recipe_url") or "").strip()[:500]
+    ingredients = parse_ingredients(payload.get("ingredients"))
+    if recipe_url and not recipe_url.startswith(("http://", "https://")):
+        recipe_url = "https://" + recipe_url
     try:
         date.fromisoformat(meal_date)
     except ValueError:
@@ -1101,15 +1175,96 @@ def api_meals_upsert():
     db = get_db()
     db.execute(
         """
-        INSERT INTO meal_slots (household_id, meal_date, meal_type, title, notes)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO meal_slots (
+            household_id, meal_date, meal_type, title, notes, recipe_url, ingredients
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(household_id, meal_date, meal_type)
-        DO UPDATE SET title = excluded.title, notes = excluded.notes
+        DO UPDATE SET
+            title = excluded.title,
+            notes = excluded.notes,
+            recipe_url = excluded.recipe_url,
+            ingredients = excluded.ingredients
         """,
-        (household["id"], meal_date, meal_type, title, notes),
+        (
+            household["id"],
+            meal_date,
+            meal_type,
+            title,
+            notes,
+            recipe_url,
+            ingredients_json(ingredients),
+        ),
     )
     db.commit()
-    return jsonify({"ok": True, "date": meal_date, "meal_type": meal_type, "title": title, "notes": notes})
+    return jsonify(
+        {
+            "ok": True,
+            "date": meal_date,
+            "meal_type": meal_type,
+            "title": title,
+            "notes": notes,
+            "recipe_url": recipe_url,
+            "ingredients": ingredients,
+        }
+    )
+
+
+@app.post("/api/meals/to-groceries")
+@login_required
+def api_meals_to_groceries():
+    user, household, err = household_for_api()
+    if err:
+        return err
+    if not plan_status(household)["access"]:
+        return jsonify({"error": "Trial ended. Subscribe to keep editing."}), 402
+    payload = request.get_json(silent=True) or {}
+    names = payload.get("names") or []
+    if not isinstance(names, list):
+        return jsonify({"error": "names must be a list"}), 400
+
+    cleaned: list[str] = []
+    for name in names:
+        title = str(name or "").strip()[:200]
+        if title and title.lower() not in {t.lower() for t in cleaned}:
+            cleaned.append(title)
+    if not cleaned:
+        return jsonify({"error": "Pick at least one ingredient"}), 400
+
+    db = get_db()
+    existing_rows = db.execute(
+        """
+        SELECT title FROM grocery_items
+        WHERE household_id = ? AND done = 0
+        """,
+        (household["id"],),
+    ).fetchall()
+    existing = {str(r["title"]).strip().lower() for r in existing_rows}
+
+    max_order = db.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) FROM grocery_items WHERE household_id = ?",
+        (household["id"],),
+    ).fetchone()[0]
+    next_order = int(max_order) + 1
+    added: list[str] = []
+    skipped: list[str] = []
+    now = utc_now_iso()
+    for title in cleaned:
+        if title.lower() in existing:
+            skipped.append(title)
+            continue
+        db.execute(
+            """
+            INSERT INTO grocery_items (household_id, title, done, sort_order, created_by, created_at)
+            VALUES (?, ?, 0, ?, ?, ?)
+            """,
+            (household["id"], title, next_order, user["id"], now),
+        )
+        existing.add(title.lower())
+        added.append(title)
+        next_order += 1
+    db.commit()
+    return jsonify({"ok": True, "added": added, "skipped": skipped})
 
 
 @app.get("/api/chores")

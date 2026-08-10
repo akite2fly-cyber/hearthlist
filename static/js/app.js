@@ -203,3 +203,103 @@ if (choreForm) {
 Promise.all([loadGroceries(), loadMeals(), loadChores()]).catch(() => {
   /* panels may not exist on other pages */
 });
+
+const inviteCard = document.getElementById("invite-card");
+const inviteStatus = document.getElementById("invite-status");
+const inviteMessage = document.getElementById("invite-message");
+
+function invitePayload() {
+  if (!inviteCard) return null;
+  return {
+    code: inviteCard.dataset.inviteCode || "",
+    url: inviteCard.dataset.inviteUrl || "",
+    name: inviteCard.dataset.householdName || "our household",
+  };
+}
+
+function buildInviteMessage() {
+  const data = invitePayload();
+  if (!data) return "";
+  return [
+    `Want to share groceries, meals, and chores with me on Hearthlist?`,
+    ``,
+    `Join “${data.name}” here:`,
+    data.url,
+    ``,
+    `Or use invite code: ${data.code}`,
+  ].join("\n");
+}
+
+async function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  area.remove();
+}
+
+function setInviteStatus(text) {
+  if (inviteStatus) inviteStatus.textContent = text;
+}
+
+if (inviteMessage) {
+  inviteMessage.value = buildInviteMessage();
+}
+
+document.getElementById("copy-invite-link")?.addEventListener("click", async () => {
+  const data = invitePayload();
+  if (!data) return;
+  await copyText(data.url);
+  setInviteStatus("Invite link copied.");
+});
+
+document.getElementById("copy-invite-code")?.addEventListener("click", async () => {
+  const data = invitePayload();
+  if (!data) return;
+  await copyText(data.code);
+  setInviteStatus("Invite code copied.");
+});
+
+document.getElementById("copy-invite-message")?.addEventListener("click", async () => {
+  const text = buildInviteMessage();
+  await copyText(text);
+  setInviteStatus("Message copied — paste it into a text or email.");
+});
+
+document.getElementById("share-invite")?.addEventListener("click", async () => {
+  const data = invitePayload();
+  if (!data) return;
+  const text = buildInviteMessage();
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: "Join my Hearthlist household",
+        text,
+        url: data.url,
+      });
+      setInviteStatus("Shared.");
+      return;
+    } catch (_) {
+      /* user canceled or share failed — fall through */
+    }
+  }
+  await copyText(text);
+  setInviteStatus("Share isn’t available here — message copied instead.");
+});
+
+function openInviteTab() {
+  showTab("people");
+  inviteCard?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.getElementById("invite-open")?.addEventListener("click", openInviteTab);
+document.getElementById("invite-open-banner")?.addEventListener("click", openInviteTab);
+
+if (new URLSearchParams(window.location.search).get("invite") === "1") {
+  openInviteTab();
+}

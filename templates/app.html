@@ -8,6 +8,7 @@
     <h1 class="app-title">Hearthlist</h1>
   </div>
   <div class="app-top-actions">
+    <button type="button" class="btn btn-primary btn-small" id="invite-open">Invite</button>
     <a class="nav-link" href="{{ url_for('account') }}">Account</a>
     <a class="nav-link" href="{{ url_for('logout') }}">Sign out</a>
   </div>
@@ -19,7 +20,8 @@
 </div>
 {% elif status.trial_active and not status.subscribed %}
 <div class="banner">
-  Trial active until {{ status.trial_ends_at[:10] }}. Invite code: <strong>{{ household.invite_code }}</strong>
+  Trial active until {{ status.trial_ends_at[:10] }}.
+  <button type="button" class="linkish" id="invite-open-banner">Invite someone to your household</button>
 </div>
 {% endif %}
 
@@ -85,11 +87,29 @@
         <p class="hint">{{ status.member_count }} of {{ status.member_limit }} seats used</p>
       </div>
     </div>
-    <div class="invite-box">
-      <p>Share this invite code:</p>
-      <p class="invite-code">{{ household.invite_code }}</p>
-      <p class="hint">Or link: <code>{{ url_for('join_link', code=household.invite_code, _external=True) }}</code></p>
+
+    <div
+      class="invite-card"
+      id="invite-card"
+      data-invite-code="{{ household.invite_code }}"
+      data-invite-url="{{ invite_url }}"
+      data-household-name="{{ household.name }}"
+    >
+      <h3>Invite your household</h3>
+      <p class="hint">Send this so a partner, roommate, or family member can join.</p>
+      <p class="invite-code" id="invite-code-display">{{ household.invite_code }}</p>
+      <p class="invite-url-line" id="invite-url-display">{{ invite_url }}</p>
+      <div class="invite-actions">
+        <button type="button" class="btn btn-primary" id="copy-invite-link">Copy invite link</button>
+        <button type="button" class="btn btn-ghost" id="copy-invite-code">Copy code</button>
+        <button type="button" class="btn btn-ghost" id="share-invite">Share…</button>
+      </div>
+      <p class="hint" id="invite-status" aria-live="polite"></p>
+      <label class="field-label" for="invite-message">Message you can paste</label>
+      <textarea id="invite-message" class="invite-message" rows="4" readonly></textarea>
+      <button type="button" class="btn btn-ghost" id="copy-invite-message">Copy message</button>
     </div>
+
     <ul class="people-list">
       {% for m in members %}
       <li>

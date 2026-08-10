@@ -587,6 +587,7 @@ def home(household, user):
         """,
         (household["id"],),
     ).fetchall()
+    invite_url = public_base_url() + url_for("join_link", code=household["invite_code"])
     return render_template(
         "app.html",
         household=household,
@@ -596,6 +597,7 @@ def home(household, user):
         weekdays=WEEKDAYS,
         meal_types=MEAL_TYPES,
         week_dates=[d.isoformat() for d in week_dates()],
+        invite_url=invite_url,
     )
 
 

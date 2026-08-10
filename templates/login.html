@@ -10,9 +10,12 @@
     <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
     <h1>Sign in</h1>
     <p class="auth-sub">Use the email and password for your household.</p>
-    <form method="post" class="auth-form">
+    {% if login_error %}
+    <p class="auth-error" role="alert">{{ login_error }}</p>
+    {% endif %}
+    <form method="post" class="auth-form" action="{{ url_for('login') }}">
       <label>Email
-        <input type="email" name="email" required autocomplete="email" inputmode="email" autocapitalize="none" />
+        <input type="email" name="email" value="{{ email or '' }}" required autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" />
       </label>
       <label>Password
         <input type="password" name="password" required autocomplete="current-password" />

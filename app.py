@@ -6,9 +6,11 @@ import json
 import os
 import re
 import secrets
+import smtplib
 import sqlite3
 import string
 from datetime import date, datetime, timedelta, timezone
+from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from typing import Any
@@ -74,6 +76,12 @@ def ensure_env() -> dict[str, str]:
         "STRIPE_WEBHOOK_SECRET",
         "STRIPE_PRICE_MONTHLY",
         "STRIPE_PRICE_YEARLY",
+        "SMTP_HOST",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "SMTP_PASSWORD",
+        "SMTP_FROM",
+        "SMTP_USE_TLS",
     ):
         raw = os.environ.get(key)
         if raw:
@@ -542,6 +550,55 @@ def create_reset_token(user_id: int) -> str:
     return token
 
 
+def smtp_configured() -> bool:
+    return bool((os.environ.get("SMTP_HOST") or "").strip() and (os.environ.get("SMTP_FROM") or "").strip())
+
+
+def send_reset_email(to_email: str, reset_url: str) -> bool:
+    """Send a password-reset email when SMTP env vars are set. Returns True on success."""
+    host = (os.environ.get("SMTP_HOST") or "").strip()
+    from_addr = (os.environ.get("SMTP_FROM") or "").strip()
+    if not host or not from_addr:
+        return False
+    port = int((os.environ.get("SMTP_PORT") or "587").strip() or "587")
+    user = (os.environ.get("SMTP_USER") or "").strip()
+    password = os.environ.get("SMTP_PASSWORD") or ""
+    use_tls = (os.environ.get("SMTP_USE_TLS") or "1").strip().lower() not in ("0", "false", "no")
+
+    msg = EmailMessage()
+    msg["Subject"] = "Reset your Hearthlist password"
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg.set_content(
+        "Use this link to set a new Hearthlist password (expires in 1 hour):\n\n"
+        f"{reset_url}\n\n"
+        "If you did not request this, you can ignore this email.\n"
+    )
+
+    try:
+        with smtplib.SMTP(host, port, timeout=20) as smtp:
+            if use_tls:
+                smtp.starttls()
+            if user:
+                smtp.login(user, password)
+            smtp.send_message(msg)
+        return True
+    except Exception as exc:  # pragma: no cover
+        print(f"Password reset email failed: {exc}")
+        return False
+
+
+def deliver_reset_link(to_email: str, reset_url: str) -> bool:
+    """Email the reset link when SMTP is configured. Never expose it in the browser."""
+    if smtp_configured():
+        return send_reset_email(to_email, reset_url)
+    if not IS_PRODUCTION:
+        # Local recovery only — link goes to the server console, not the page.
+        print(f"[hearthlist] Password reset for {to_email}: {reset_url}")
+        return True
+    return False
+
+
 def valid_reset_token(token: str):
     row = get_db().execute(
         """
@@ -767,25 +824,27 @@ def forgot_password():
     if current_user():
         return redirect(url_for("home"))
     if request.method == "GET":
-        return render_template("forgot_password.html")
+        return render_template("forgot_password.html", email_ready=smtp_configured())
 
     email = (request.form.get("email") or "").strip().lower()
     user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    reset_url = None
-    if user:
+    # Same response whether or not the email exists (no account enumeration).
+    # Only mint a token when it can be delivered (SMTP) or logged locally (dev).
+    if user and (smtp_configured() or not IS_PRODUCTION):
         token = create_reset_token(user["id"])
         reset_url = public_base_url() + url_for("reset_password", token=token)
-        # Until email/SMTP is configured, show the one-time link on screen
-        # so you can recover access. Keep this private.
+        deliver_reset_link(user["email"], reset_url)
+
     flash(
-        "If that email is registered, you can reset your password below.",
+        "If that email is registered, check your inbox for a reset link. "
+        "It may take a minute to arrive.",
         "ok",
     )
     return render_template(
         "forgot_password.html",
         submitted=True,
-        reset_url=reset_url,
         email=email,
+        email_ready=smtp_configured(),
     )
 
 
@@ -1675,12 +1734,11 @@ def billing_webhook():
         return jsonify({"ok": False}), 400
     payload = request.data
     sig = request.headers.get("Stripe-Signature", "")
-    secret = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+    secret = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
+    if not secret:
+        return jsonify({"error": "Webhook secret not configured"}), 503
     try:
-        if secret:
-            event = stripe.Webhook.construct_event(payload, sig, secret)
-        else:
-            event = stripe.Event.construct_from(request.get_json(force=True), stripe.api_key)
+        event = stripe.Webhook.construct_event(payload, sig, secret)
     except Exception:
         return jsonify({"error": "Invalid payload"}), 400
 
@@ -1720,7 +1778,7 @@ def billing_webhook():
 @require_household
 def billing_dev_activate(household, user):
     """Local/dev helper when Stripe keys are not set yet."""
-    if IS_PRODUCTION and os.environ.get("STRIPE_SECRET_KEY"):
+    if IS_PRODUCTION:
         flash("Use Stripe Checkout in production.", "error")
         return redirect(url_for("account"))
     get_db().execute(

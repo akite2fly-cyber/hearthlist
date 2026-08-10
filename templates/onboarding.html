@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Set up household — Hearthlist{% endblock %}
+{% block body_class %}page-auth{% endblock %}
+{% block content %}
+<main class="auth-card auth-card--solo">
+  <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
+  <h1>Set up your household</h1>
+  <form method="post" class="auth-form">
+    <input type="hidden" name="action" value="create" />
+    <label>Household name
+      <input type="text" name="household_name" placeholder="Our home" required />
+    </label>
+    <button class="btn btn-primary btn-block" type="submit">Create household</button>
+  </form>
+  <hr class="soft-rule" />
+  <form method="post" class="auth-form">
+    <input type="hidden" name="action" value="join" />
+    <label>Or join with invite code
+      <input type="text" name="invite_code" placeholder="ABCD1234" style="text-transform:uppercase" />
+    </label>
+    <button class="btn btn-ghost btn-block" type="submit">Join household</button>
+  </form>
+</main>
+{% endblock %}

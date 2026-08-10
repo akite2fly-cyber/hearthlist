@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ household.name }} — Hearthlist{% endblock %}
+{% block body_class %}page-app{% endblock %}
+{% block content %}
+<header class="app-top">
+  <div>
+    <p class="eyebrow">{{ household.name }}</p>
+    <h1 class="app-title">Hearthlist</h1>
+  </div>
+  <div class="app-top-actions">
+    <a class="nav-link" href="{{ url_for('account') }}">Account</a>
+    <a class="nav-link" href="{{ url_for('logout') }}">Sign out</a>
+  </div>
+</header>
+
+{% if not status.access %}
+<div class="banner banner--warn">
+  Your trial has ended. <a href="{{ url_for('account') }}">Subscribe</a> to keep editing your household lists.
+</div>
+{% elif status.trial_active and not status.subscribed %}
+<div class="banner">
+  Trial active until {{ status.trial_ends_at[:10] }}. Invite code: <strong>{{ household.invite_code }}</strong>
+</div>
+{% endif %}
+
+<div class="app-hero-band" aria-hidden="true">
+  <img src="https://images.unsplash.com/photo-1505577058444-a3dab90d4253?auto=format&fit=crop&w=1600&q=80" alt="" />
+</div>
+
+<nav class="tabs" role="tablist" aria-label="Household sections">
+  <button type="button" class="tab is-active" data-tab="groceries" role="tab" aria-selected="true">Groceries</button>
+  <button type="button" class="tab" data-tab="meals" role="tab" aria-selected="false">Meals</button>
+  <button type="button" class="tab" data-tab="chores" role="tab" aria-selected="false">Chores</button>
+  <button type="button" class="tab" data-tab="people" role="tab" aria-selected="false">People</button>
+</nav>
+
+<main class="app-panels">
+  <section class="panel is-active" id="panel-groceries" role="tabpanel">
+    <div class="panel-head">
+      <div>
+        <h2>Grocery list</h2>
+        <p class="hint">Everyone sees the same list.</p>
+      </div>
+      <img class="panel-thumb" src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80" alt="" />
+    </div>
+    <form id="grocery-form" class="inline-form">
+      <input id="grocery-input" type="text" placeholder="Add milk, bread, berries…" maxlength="200" required />
+      <button class="btn btn-primary" type="submit">Add</button>
+    </form>
+    <ul id="grocery-list" class="item-list"></ul>
+  </section>
+
+  <section class="panel" id="panel-meals" role="tabpanel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2>This week’s meals</h2>
+        <p class="hint">Tap a cell to edit breakfast, lunch, or dinner.</p>
+      </div>
+      <img class="panel-thumb" src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=400&q=80" alt="" />
+    </div>
+    <div id="meals-grid" class="meals-grid"></div>
+  </section>
+
+  <section class="panel" id="panel-chores" role="tabpanel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2>Chores</h2>
+        <p class="hint">Assign a person and check them off.</p>
+      </div>
+      <img class="panel-thumb" src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80" alt="" />
+    </div>
+    <form id="chore-form" class="chore-form">
+      <input id="chore-title" type="text" placeholder="Take out recycling" maxlength="200" required />
+      <input id="chore-assignee" type="text" placeholder="Who?" maxlength="80" />
+      <input id="chore-due" type="date" />
+      <button class="btn btn-primary" type="submit">Add chore</button>
+    </form>
+    <ul id="chore-list" class="item-list"></ul>
+  </section>
+
+  <section class="panel" id="panel-people" role="tabpanel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2>Household people</h2>
+        <p class="hint">{{ status.member_count }} of {{ status.member_limit }} seats used</p>
+      </div>
+    </div>
+    <div class="invite-box">
+      <p>Share this invite code:</p>
+      <p class="invite-code">{{ household.invite_code }}</p>
+      <p class="hint">Or link: <code>{{ url_for('join_link', code=household.invite_code, _external=True) }}</code></p>
+    </div>
+    <ul class="people-list">
+      {% for m in members %}
+      <li>
+        <strong>{{ m.name }}</strong>
+        <span>{{ m.email }} · {{ m.role }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

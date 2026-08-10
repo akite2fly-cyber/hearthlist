@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Join household — Hearthlist{% endblock %}
+{% block body_class %}page-auth{% endblock %}
+{% block content %}
+<main class="auth-card auth-card--solo">
+  <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
+  <h1>Join a household</h1>
+  {% if household %}
+  <p class="auth-sub">You’re invited to <strong>{{ household.name }}</strong>.</p>
+  {% endif %}
+  <form method="post" class="auth-form">
+    <label>Invite code
+      <input type="text" name="invite_code" value="{{ code }}" required style="text-transform:uppercase" />
+    </label>
+    <button class="btn btn-primary btn-block" type="submit">Join</button>
+  </form>
+</main>
+{% endblock %}

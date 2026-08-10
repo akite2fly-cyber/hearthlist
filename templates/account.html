@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Account — Hearthlist{% endblock %}
+{% block body_class %}page-app{% endblock %}
+{% block content %}
+<header class="app-top">
+  <div>
+    <p class="eyebrow">Account</p>
+    <h1 class="app-title">{{ user.name }}</h1>
+  </div>
+  <div class="app-top-actions">
+    <a class="nav-link" href="{{ url_for('home') }}">Back to hub</a>
+    <a class="nav-link" href="{{ url_for('logout') }}">Sign out</a>
+  </div>
+</header>
+
+<section class="account-grid">
+  <article class="account-card">
+    <h2>Plan</h2>
+    <p class="price-line">
+      {% if status.subscribed %}Household · Active
+      {% elif status.trial_active %}Trial · ends {{ status.trial_ends_at[:10] }}
+      {% else %}Trial ended{% endif %}
+    </p>
+    <ul class="plain-list">
+      <li>Members: {{ status.member_count }} / {{ status.member_limit }}</li>
+      <li>Household: {{ household.name }}</li>
+      <li>Invite code: <strong>{{ household.invite_code }}</strong></li>
+    </ul>
+  </article>
+
+  <article class="account-card account-card--photo">
+    <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1000&q=80" alt="Warm home interior" />
+    <div>
+      <h2>Upgrade</h2>
+      <p>$4.99/mo or $39/year · up to 6 members · keep syncing forever.</p>
+      {% if status.stripe_ready %}
+      <form method="post" action="{{ url_for('billing_checkout') }}" class="stack-form">
+        <button class="btn btn-primary" name="price" value="monthly" type="submit">Subscribe monthly</button>
+        <button class="btn btn-ghost" name="price" value="yearly" type="submit">Subscribe yearly</button>
+      </form>
+      {% if household.stripe_customer_id %}
+      <form method="post" action="{{ url_for('billing_portal') }}">
+        <button class="btn btn-ghost" type="submit">Manage billing</button>
+      </form>
+      {% endif %}
+      {% else %}
+      <p class="hint">Stripe keys not set yet. For local testing you can activate a plan:</p>
+      <form method="post" action="{{ url_for('billing_dev_activate') }}">
+        <button class="btn btn-primary" type="submit">Activate test plan</button>
+      </form>
+      {% endif %}
+    </div>
+  </article>
+</section>
+{% endblock %}

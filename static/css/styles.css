@@ -112,6 +112,143 @@ a {
   width: 100%;
 }
 
+.open-hero {
+  position: relative;
+  min-height: 100svh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  color: #f7f3ea;
+  overflow: hidden;
+}
+
+.open-hero-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.02);
+  animation: hero-drift 18s ease-in-out infinite alternate;
+}
+
+.open-hero-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(16, 32, 26, 0.55) 0%, rgba(16, 32, 26, 0.28) 42%, rgba(16, 32, 26, 0.72) 100%);
+}
+
+.open-nav,
+.open-hero-copy {
+  position: relative;
+  z-index: 1;
+}
+
+.open-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.1rem 1.25rem;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+}
+
+.brand--light,
+.nav-link--light {
+  color: #f7f3ea;
+}
+
+.open-hero-copy {
+  width: min(720px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 10vh 0 6rem;
+  display: grid;
+  align-content: end;
+  gap: 0.75rem;
+  animation: rise 800ms ease both;
+}
+
+.brand-mark {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(2.8rem, 10vw, 5.5rem);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.open-hero-copy h1 {
+  margin: 0;
+  max-width: 12ch;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(1.55rem, 4.5vw, 2.35rem);
+  line-height: 1.15;
+}
+
+.open-hero-copy .lede {
+  margin: 0.25rem 0 0.5rem;
+  max-width: 28ch;
+  color: rgba(247, 243, 234, 0.9);
+}
+
+.btn-light {
+  background: rgba(255, 255, 255, 0.16);
+  color: #f7f3ea;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(8px);
+}
+
+.trust-line--light {
+  color: rgba(247, 243, 234, 0.82);
+}
+
+@keyframes hero-drift {
+  from {
+    transform: scale(1.02) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+.auth-layout--compact .auth-photo p {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .open-hero-copy {
+    padding-top: 18vh;
+  }
+
+  .auth-layout,
+  .auth-layout--compact {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-layout--compact .auth-photo {
+    min-height: 28vh;
+  }
+
+  .auth-layout--compact .auth-photo img {
+    min-height: 28vh;
+  }
+
+  .auth-card {
+    padding: 1.5rem 1.25rem 3rem;
+  }
+
+  .auth-form input {
+    font-size: 16px; /* prevents iOS zoom */
+    min-height: 48px;
+  }
+
+  .btn-lg {
+    min-height: 52px;
+  }
+}
+
 .hero {
   width: min(1120px, calc(100% - 2rem));
   margin: 0.5rem auto 2.5rem;

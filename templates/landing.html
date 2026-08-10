@@ -1,106 +1,68 @@
 {% extends "base.html" %}
-{% block title %}Hearthlist — Shared groceries, meals, and chores for your household{% endblock %}
+{% block title %}Hearthlist — Shared groceries, meals, and chores{% endblock %}
 {% block body_class %}page-landing{% endblock %}
 {% block content %}
-<header class="site-nav">
-  <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
-  <nav class="nav-actions">
-    <a class="nav-link" href="{{ url_for('login') }}">Sign in</a>
-    <a class="btn btn-primary" href="{{ url_for('signup') }}">Start free — 7 days</a>
-  </nav>
-</header>
+<section class="open-hero">
+  <img
+    class="open-hero-photo"
+    src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=2000&q=80"
+    alt="Warm kitchen with natural light"
+  />
+  <div class="open-hero-shade" aria-hidden="true"></div>
 
-<section class="hero">
-  <div class="hero-copy">
-    <p class="eyebrow">Stop the group-chat chaos</p>
-    <h1>Hearthlist</h1>
-    <p class="hero-subhead">One shared place for groceries, meals, and chores.</p>
+  <header class="open-nav">
+    <a class="brand brand--light" href="{{ url_for('landing') }}">Hearthlist</a>
+    <a class="nav-link nav-link--light" href="{{ url_for('login') }}">Sign in</a>
+  </header>
+
+  <div class="open-hero-copy">
+    <p class="brand-mark">Hearthlist</p>
+    <h1>Home lists that stay in sync.</h1>
     <p class="lede">
-      Add milk on your phone. Your partner sees it at the store.
-      Plan dinner once. Split chores without nagging texts.
+      Groceries, meals, and chores — one calm place for your household.
     </p>
     <div class="hero-cta">
-      <a class="btn btn-primary btn-lg" href="{{ url_for('signup') }}">Start free trial</a>
-      <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+      <a class="btn btn-primary btn-lg" href="{{ url_for('signup') }}">Start free — 7 days</a>
+      <a class="btn btn-light btn-lg" href="{{ url_for('login') }}">Sign in</a>
     </div>
-    <p class="trust-line">No card needed · Works on iPhone, iPad, Android &amp; laptop · Cancel anytime</p>
-  </div>
-  <div class="hero-visual" aria-hidden="true">
-    <img
-      class="hero-photo"
-      src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&w=1600&q=80"
-      alt=""
-      width="1600"
-      height="1200"
-    />
-    <div class="hero-glow"></div>
+    <p class="trust-line trust-line--light">No card needed · Works on iPhone &amp; iPad</p>
   </div>
 </section>
 
 <section class="how" id="how">
-  <h2>Up and running in 2 minutes</h2>
+  <h2>How it works</h2>
   <div class="how-grid">
     <article class="how-step">
       <span class="how-num">1</span>
       <h3>Create your household</h3>
-      <p>Sign up free. Name your home. You’re in.</p>
+      <p>Sign up free and name your home.</p>
     </article>
     <article class="how-step">
       <span class="how-num">2</span>
       <h3>Invite your people</h3>
-      <p>Send a link or code. They join on any phone.</p>
+      <p>Share a link. They join on any phone.</p>
     </article>
     <article class="how-step">
       <span class="how-num">3</span>
-      <h3>Share the same lists</h3>
-      <p>Groceries, meals, and chores stay in sync.</p>
+      <h3>Use the same lists</h3>
+      <p>Groceries, meals, and chores stay together.</p>
     </article>
-  </div>
-  <div class="how-cta">
-    <a class="btn btn-primary btn-lg" href="{{ url_for('signup') }}">Create my household</a>
   </div>
 </section>
 
 <section class="photo-strip" aria-label="Life at home">
   <figure>
-    <img src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80" alt="Fresh groceries on a kitchen counter" />
-    <figcaption>Groceries, together</figcaption>
+    <img src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=900&q=80" alt="Fresh groceries on a kitchen counter" loading="lazy" />
+    <figcaption>Groceries</figcaption>
   </figure>
   <figure>
-    <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=900&q=80" alt="A warm family dinner table" />
-    <figcaption>Meals for the week</figcaption>
+    <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=900&q=80" alt="A warm family dinner table" loading="lazy" />
+    <figcaption>Meals</figcaption>
   </figure>
   <figure>
-    <img src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80" alt="A bright tidy living room" />
-    <figcaption>Chores without chaos</figcaption>
+    <img src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80" alt="A bright tidy living room" loading="lazy" />
+    <figcaption>Chores</figcaption>
   </figure>
-</section>
-
-<section class="features">
-  <div class="feature">
-    <h2>Shared grocery list</h2>
-    <p>One list. Everyone updates it. No more “I thought you got eggs.”</p>
-  </div>
-  <div class="feature">
-    <h2>Weekly meal plan</h2>
-    <p>Breakfast, lunch, dinner — so “what’s for dinner?” already has an answer.</p>
-  </div>
-  <div class="feature">
-    <h2>Simple chore board</h2>
-    <p>Assign who does what, check it off, keep the house moving.</p>
-  </div>
-</section>
-
-<section class="lifestyle-band">
-  <img
-    src="https://images.unsplash.com/photo-1488459716781-31db52582fe9?auto=format&fit=crop&w=1600&q=80"
-    alt="Colorful produce at a market"
-  />
-  <div class="lifestyle-copy">
-    <h2>Made for real households</h2>
-    <p>Couples, roommates, families — anyone tired of sticky notes and endless texts.</p>
-    <a class="btn btn-on-dark" href="{{ url_for('signup') }}">Try it free for 7 days</a>
-  </div>
 </section>
 
 <section class="pricing" id="pricing">
@@ -110,35 +72,19 @@
     <article class="price-card">
       <h3>Trial</h3>
       <p class="price">$0</p>
-      <p>7 days full access · up to 2 members · no card</p>
-      <ul>
-        <li>Groceries, meals, chores</li>
-        <li>Invite your household</li>
-      </ul>
-      <a class="btn btn-ghost" href="{{ url_for('signup') }}">Start free</a>
+      <p>7 days · up to 2 members · no card</p>
     </article>
     <article class="price-card price-card--featured">
       <h3>Household</h3>
       <p class="price">$4.99<span>/mo</span></p>
       <p>or $39/year · up to 6 members</p>
-      <ul>
-        <li>Everything in trial</li>
-        <li>More seats for family</li>
-        <li>Keep syncing after trial</li>
-      </ul>
       <a class="btn btn-primary" href="{{ url_for('signup') }}">Start free trial</a>
     </article>
   </div>
 </section>
 
-<section class="final-cta">
-  <h2>Ready for a calmer home week?</h2>
-  <p>Create your household in under two minutes.</p>
-  <a class="btn btn-primary btn-lg" href="{{ url_for('signup') }}">Start free trial</a>
-</section>
-
 <footer class="site-footer">
-  <p>Hearthlist — one place for groceries, meals, and chores.</p>
+  <p>Hearthlist — groceries, meals, and chores in one place.</p>
 </footer>
 
 <div class="mobile-cta" aria-label="Start free trial">

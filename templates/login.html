@@ -2,22 +2,22 @@
 {% block title %}Sign in — Hearthlist{% endblock %}
 {% block body_class %}page-auth{% endblock %}
 {% block content %}
-<div class="auth-layout">
+<div class="auth-layout auth-layout--compact">
   <aside class="auth-photo" aria-hidden="true">
     <img src="https://images.unsplash.com/photo-1466637574441-749b8f19452f?auto=format&fit=crop&w=1200&q=80" alt="" />
-    <p>Welcome back to the quiet center of home.</p>
   </aside>
   <main class="auth-card">
     <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
     <h1>Sign in</h1>
+    <p class="auth-sub">Use the email and password for your household.</p>
     <form method="post" class="auth-form">
       <label>Email
-        <input type="email" name="email" required autocomplete="email" />
+        <input type="email" name="email" required autocomplete="email" inputmode="email" autocapitalize="none" />
       </label>
       <label>Password
         <input type="password" name="password" required autocomplete="current-password" />
       </label>
-      <button class="btn btn-primary btn-block" type="submit">Open household</button>
+      <button class="btn btn-primary btn-block btn-lg" type="submit">Open household</button>
     </form>
     <p class="auth-foot"><a href="{{ url_for('forgot_password') }}">Forgot password?</a></p>
     <p class="auth-foot">New here? <a href="{{ url_for('signup') }}">Start free trial</a></p>

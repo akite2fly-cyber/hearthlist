@@ -202,7 +202,9 @@ class DbCursor:
 
     def _keys(self) -> list[str]:
         desc = getattr(self._cursor, "description", None) or ()
-        return [col[0] for col in desc]
+        # libsql/Turso may return identifiers uppercased (e.g. PLAN); normalize
+        # so row["plan"] matches sqlite3.Row behavior on local SQLite.
+        return [col[0].lower() if isinstance(col[0], str) else col[0] for col in desc]
 
     def _wrap(self, row: Any) -> DbRow | None:
         if row is None:

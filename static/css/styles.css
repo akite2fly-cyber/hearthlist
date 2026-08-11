@@ -939,11 +939,11 @@ body.page-app {
 }
 
 .app-hero-band img[data-tab="people"] {
-  object-position: center 30%;
+  object-position: center 28%;
 }
 
 .app-hero-band img[data-tab="chores"] {
-  object-position: center 35%;
+  object-position: center 45%;
 }
 
 .app-hero-band img[data-tab="reminders"] {

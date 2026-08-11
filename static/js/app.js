@@ -13,7 +13,7 @@ const TAB_HERO_IMAGES = {
   meals:
     "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1600&h=500&q=80",
   chores:
-    "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1600&h=500&q=80",
+    "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=1600&h=500&q=80",
   reminders:
     "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=1600&h=500&q=80",
   people:

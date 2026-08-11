@@ -17,7 +17,7 @@ const TAB_HERO_IMAGES = {
   reminders:
     "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=1600&h=480&q=80",
   people:
-    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&h=480&q=80",
+    "https://images.unsplash.com/photo-1491438590914-bc09fbaafb4a?auto=format&fit=crop&w=1600&h=500&q=80",
 };
 
 function setTabHero(name) {

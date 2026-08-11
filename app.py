@@ -704,15 +704,12 @@ def plan_status(household) -> dict:
 def stripe_val(obj: Any, key: str, default: Any = None) -> Any:
     if obj is None:
         return default
-    try:
-        if hasattr(obj, "to_dict"):
-            return obj.to_dict().get(key, default)
-    except Exception:
-        pass
+    if isinstance(obj, dict):
+        return obj.get(key, default)
     try:
         return obj[key]
     except Exception:
-        return getattr(obj, key, default)
+        return default
 
 
 def stripe_id(value: Any) -> str | None:
@@ -756,7 +753,11 @@ def sync_household_plan_from_stripe(household) -> None:
         return
     try:
         subs = stripe.Subscription.list(customer=str(customer_id), limit=10)
-        records = list(getattr(subs, "data", None) or [])
+        records = []
+        try:
+            records = list(subs["data"])
+        except Exception:
+            records = []
         chosen = None
         for sub in records:
             if stripe_val(sub, "status") in ("active", "trialing", "past_due"):
@@ -1082,9 +1083,11 @@ def account(household, user):
                     )
             except Exception as exc:  # pragma: no cover
                 print(f"Checkout session lookup failed: {exc}")
-        sync_household_plan_from_stripe(household)
-        household = user_household(user["id"]) or household
         status = plan_status(household)
+        if not status.get("subscribed"):
+            sync_household_plan_from_stripe(household)
+            household = user_household(user["id"]) or household
+            status = plan_status(household)
         if request.args.get("checkout") == "success" and status.get("subscribed"):
             flash("Subscription is active. Thank you!", "ok")
         return render_template("account.html", household=household, user=user, status=status)
@@ -1829,7 +1832,11 @@ def billing_checkout(household, user):
         client_reference_id=str(household["id"]),
         metadata={"household_id": str(household["id"])},
     )
-    return redirect(session_obj.url, code=303)
+    checkout_url = stripe_val(session_obj, "url")
+    if not checkout_url:
+        flash("Stripe Checkout did not return a URL. Try again in a moment.", "error")
+        return redirect(url_for("account"))
+    return redirect(checkout_url, code=303)
 
 
 @app.post("/billing/portal")

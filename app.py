@@ -701,8 +701,33 @@ def plan_status(household) -> dict:
     }
 
 
+def stripe_val(obj: Any, key: str, default: Any = None) -> Any:
+    if obj is None:
+        return default
+    try:
+        if hasattr(obj, "to_dict"):
+            return obj.to_dict().get(key, default)
+    except Exception:
+        pass
+    try:
+        return obj[key]
+    except Exception:
+        return getattr(obj, key, default)
+
+
+def stripe_id(value: Any) -> str | None:
+    if not value:
+        return None
+    if isinstance(value, str):
+        return value
+    found = stripe_val(value, "id")
+    return str(found) if found else None
+
+
 def mark_household_plan(household_id: int, plan: str, subscription_id: str | None = None, customer_id: str | None = None) -> None:
     db = get_db()
+    subscription_id = stripe_id(subscription_id)
+    customer_id = stripe_id(customer_id) or customer_id
     if subscription_id and customer_id:
         db.execute(
             """
@@ -730,22 +755,22 @@ def sync_household_plan_from_stripe(household) -> None:
     if not customer_id:
         return
     try:
-        subs = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+        subs = stripe.Subscription.list(customer=str(customer_id), limit=10)
+        records = list(getattr(subs, "data", None) or [])
+        chosen = None
+        for sub in records:
+            if stripe_val(sub, "status") in ("active", "trialing", "past_due"):
+                chosen = sub
+                break
+        if not chosen and records:
+            chosen = records[0]
+        if not chosen:
+            return
+        status = stripe_val(chosen, "status") or ""
+        plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
+        mark_household_plan(int(household["id"]), plan, stripe_val(chosen, "id"), customer_id)
     except Exception as exc:  # pragma: no cover
         print(f"Stripe subscription sync failed: {exc}")
-        return
-    chosen = None
-    for sub in subs.data:
-        if sub.get("status") in ("active", "trialing", "past_due"):
-            chosen = sub
-            break
-    if not chosen and subs.data:
-        chosen = subs.data[0]
-    if not chosen:
-        return
-    status = chosen.get("status") or ""
-    plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
-    mark_household_plan(int(household["id"]), plan, chosen.get("id"), customer_id)
 
 
 def login_required(view):
@@ -1035,28 +1060,38 @@ def home(household, user):
 @login_required
 @require_household
 def account(household, user):
-    if request.args.get("checkout") == "cancel":
-        flash("Checkout canceled. Your trial is unchanged.", "ok")
-    session_id = (request.args.get("session_id") or "").strip()
-    if stripe and os.environ.get("STRIPE_SECRET_KEY") and session_id:
-        try:
-            checkout = stripe.checkout.Session.retrieve(session_id)
-            household_id = (checkout.get("metadata") or {}).get("household_id")
-            if household_id and int(household_id) == int(household["id"]):
-                mark_household_plan(
-                    int(household["id"]),
-                    "active",
-                    checkout.get("subscription"),
-                    checkout.get("customer"),
-                )
-        except Exception as exc:  # pragma: no cover
-            print(f"Checkout session lookup failed: {exc}")
-    sync_household_plan_from_stripe(household)
-    household = user_household(user["id"]) or household
-    status = plan_status(household)
-    if request.args.get("checkout") == "success" and status.get("subscribed"):
-        flash("Subscription is active. Thank you!", "ok")
-    return render_template("account.html", household=household, user=user, status=status)
+    try:
+        if request.args.get("checkout") == "cancel":
+            flash("Checkout canceled. Your trial is unchanged.", "ok")
+        session_id = (request.args.get("session_id") or "").strip()
+        if stripe and os.environ.get("STRIPE_SECRET_KEY") and session_id:
+            try:
+                checkout = stripe.checkout.Session.retrieve(session_id)
+                metadata = stripe_val(checkout, "metadata") or {}
+                household_id = None
+                if isinstance(metadata, dict):
+                    household_id = metadata.get("household_id")
+                else:
+                    household_id = stripe_val(metadata, "household_id")
+                if household_id and int(household_id) == int(household["id"]):
+                    mark_household_plan(
+                        int(household["id"]),
+                        "active",
+                        stripe_val(checkout, "subscription"),
+                        stripe_val(checkout, "customer"),
+                    )
+            except Exception as exc:  # pragma: no cover
+                print(f"Checkout session lookup failed: {exc}")
+        sync_household_plan_from_stripe(household)
+        household = user_household(user["id"]) or household
+        status = plan_status(household)
+        if request.args.get("checkout") == "success" and status.get("subscribed"):
+            flash("Subscription is active. Thank you!", "ok")
+        return render_template("account.html", household=household, user=user, status=status)
+    except Exception as exc:  # pragma: no cover
+        print(f"Account page failed: {exc}")
+        status = plan_status(household)
+        return render_template("account.html", household=household, user=user, status=status)
 
 
 @app.post("/account/household-name")

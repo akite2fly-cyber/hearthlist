@@ -896,10 +896,8 @@ body.page-app {
 .app-hero-band {
   width: 100%;
   max-width: 100%;
-  margin: 0.35rem 0 1rem;
-  aspect-ratio: 16 / 5;
-  height: auto;
-  max-height: 190px;
+  margin: 0.35rem 0 0.9rem;
+  height: clamp(84px, 12vw, 128px);
   border-radius: var(--radius);
   border: 1px solid var(--line);
   overflow: hidden;
@@ -915,9 +913,9 @@ body.page-app {
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(28, 42, 36, 0.08),
-    transparent 45%,
-    rgba(28, 42, 36, 0.12)
+    rgba(28, 42, 36, 0.06),
+    transparent 50%,
+    rgba(28, 42, 36, 0.1)
   );
   pointer-events: none;
   z-index: 1;
@@ -928,26 +926,15 @@ body.page-app {
   inset: 0;
   width: 100%;
   height: 100%;
+  max-width: none;
   object-fit: cover;
-  object-position: center;
+  object-position: center center;
   display: block;
   transition: opacity 160ms ease;
 }
 
 .app-hero-band img.is-fading {
   opacity: 0;
-}
-
-.app-hero-band img[data-tab="people"] {
-  object-position: center 28%;
-}
-
-.app-hero-band img[data-tab="chores"] {
-  object-position: center 42%;
-}
-
-.app-hero-band img[data-tab="reminders"] {
-  object-position: center 40%;
 }
 
 .tabs {

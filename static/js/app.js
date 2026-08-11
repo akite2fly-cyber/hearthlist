@@ -241,17 +241,16 @@ async function saveMealEditor() {
   const title = ui.title.value.trim();
   const recipe_url = ui.url.value.trim();
   const ingredients = collectMealIngredients();
-  await api("/api/meals", {
-    method: "PUT",
-    body: JSON.stringify({
+  await saveMealSlot(
+    {
       date: mealEditorState.date,
       meal_type: mealEditorState.meal_type,
       title,
       recipe_url,
       ingredients,
-      notes: "",
-    }),
-  });
+    },
+    { title, recipe_url, ingredients }
+  );
   closeMealEditor();
   loadMeals();
 }
@@ -303,6 +302,27 @@ async function addCheckedIngredientsToGroceries() {
   loadMeals();
 }
 
+async function saveMealSlot(slot, patch = {}) {
+  const title = patch.title !== undefined ? patch.title : slot.title || "";
+  const recipe_url = patch.recipe_url !== undefined ? patch.recipe_url : slot.recipe_url || "";
+  const ingredients =
+    patch.ingredients !== undefined ? patch.ingredients : slot.ingredients || [];
+  await api("/api/meals", {
+    method: "PUT",
+    body: JSON.stringify({
+      date: slot.date,
+      meal_type: slot.meal_type,
+      title: (title || "").trim(),
+      recipe_url: (recipe_url || "").trim(),
+      ingredients: Array.isArray(ingredients) ? ingredients : [],
+      notes: "",
+    }),
+  });
+  slot.title = (title || "").trim();
+  slot.recipe_url = (recipe_url || "").trim();
+  slot.ingredients = Array.isArray(ingredients) ? ingredients : [];
+}
+
 async function loadMeals() {
   const grid = document.getElementById("meals-grid");
   if (!grid) return;
@@ -329,18 +349,82 @@ async function loadMeals() {
         recipe_url: "",
         ingredients: [],
       };
-      const btn = el("button", "meal-cell");
-      btn.type = "button";
-      const title = el("strong", "", slot.title || "Add…");
-      btn.appendChild(title);
-      const cues = el("div", "meal-cell-cues");
-      if (slot.recipe_url) cues.appendChild(el("span", "meal-cue", "Recipe"));
-      const ingCount = Array.isArray(slot.ingredients) ? slot.ingredients.length : 0;
-      if (ingCount) cues.appendChild(el("span", "meal-cue", `${ingCount} items`));
-      if (cues.childNodes.length) btn.appendChild(cues);
-      btn.addEventListener("click", () => openMealEditor(slot));
-      grid.appendChild(btn);
+      byDate[day] = byDate[day] || {};
+      byDate[day][type] = slot;
+
+      const cell = el("div", "meal-cell");
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "meal-cell-input";
+      input.maxLength = 200;
+      input.placeholder = "Add meal…";
+      input.value = slot.title || "";
+      input.setAttribute(
+        "aria-label",
+        `${weekdayLabel(day)} ${MEAL_TYPE_LABELS[type] || type}`
+      );
+
+      let lastSaved = slot.title || "";
+      const persistTitle = async () => {
+        const next = input.value.trim();
+        if (next === lastSaved) return;
+        input.classList.add("is-saving");
+        try {
+          await saveMealSlot(slot, { title: next });
+          lastSaved = next;
+          input.value = next;
+          refreshMealCellCues(cell, slot);
+        } catch (err) {
+          input.value = lastSaved;
+          alert(err.message || "Could not save meal.");
+        } finally {
+          input.classList.remove("is-saving");
+        }
+      };
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur();
+        }
+        if (e.key === "Escape") {
+          input.value = lastSaved;
+          input.blur();
+        }
+      });
+      input.addEventListener("blur", () => {
+        persistTitle();
+      });
+
+      const actions = el("div", "meal-cell-actions");
+      const details = el("button", "meal-cell-details", "Recipe");
+      details.type = "button";
+      details.title = "Edit recipe link and ingredients";
+      details.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMealEditor(slot);
+      });
+      actions.appendChild(details);
+
+      cell.appendChild(input);
+      cell.appendChild(actions);
+      refreshMealCellCues(cell, slot);
+      grid.appendChild(cell);
     }
+  }
+}
+
+function refreshMealCellCues(cell, slot) {
+  cell.querySelector(".meal-cell-cues")?.remove();
+  const cues = el("div", "meal-cell-cues");
+  if (slot.recipe_url) cues.appendChild(el("span", "meal-cue", "Link"));
+  const ingCount = Array.isArray(slot.ingredients) ? slot.ingredients.length : 0;
+  if (ingCount) cues.appendChild(el("span", "meal-cue", `${ingCount} items`));
+  if (cues.childNodes.length) {
+    const actions = cell.querySelector(".meal-cell-actions");
+    if (actions) cell.insertBefore(cues, actions);
+    else cell.appendChild(cues);
   }
 }
 

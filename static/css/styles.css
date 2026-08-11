@@ -775,6 +775,10 @@ a {
   margin: 0 auto 3rem;
 }
 
+body.page-app {
+  overflow-x: hidden;
+}
+
 .app-top {
   display: flex;
   justify-content: space-between;
@@ -890,17 +894,36 @@ a {
 }
 
 .app-hero-band {
-  border-radius: var(--radius);
+  width: 100vw;
+  max-width: 100vw;
+  margin: 0.35rem 0 1rem;
+  margin-left: calc(50% - 50vw);
+  height: clamp(110px, 18vw, 200px);
+  border-radius: 0;
   overflow: hidden;
-  height: 160px;
-  margin-bottom: 1rem;
-  box-shadow: var(--shadow);
+  box-shadow: none;
+  position: relative;
+}
+
+.app-hero-band::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(28, 42, 36, 0.18),
+    transparent 35%,
+    transparent 65%,
+    rgba(28, 42, 36, 0.12)
+  );
+  pointer-events: none;
 }
 
 .app-hero-band img {
   width: 100%;
-  height: 160px;
+  height: 100%;
   object-fit: cover;
+  object-position: center 45%;
 }
 
 .tabs {
@@ -1080,12 +1103,62 @@ a {
 .meal-cell {
   border: 1px solid var(--line);
   border-radius: 12px;
-  min-height: 64px;
-  padding: 0.45rem;
+  min-height: 72px;
+  padding: 0.4rem 0.45rem 0.35rem;
   background: rgba(255, 255, 255, 0.75);
   font: inherit;
   text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.meal-cell-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0.1rem 0;
+  outline: none;
+}
+
+.meal-cell-input::placeholder {
+  color: var(--ink-soft);
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.meal-cell-input:focus {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.meal-cell-input.is-saving {
+  opacity: 0.65;
+}
+
+.meal-cell-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.meal-cell-details {
+  border: 0;
+  background: rgba(31, 77, 58, 0.1);
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
   cursor: pointer;
+}
+
+.meal-cell-details:hover {
+  background: rgba(31, 77, 58, 0.16);
 }
 
 .meal-cell strong {

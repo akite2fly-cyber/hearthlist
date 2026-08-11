@@ -897,7 +897,8 @@ body.page-app {
   width: 100%;
   max-width: 100%;
   margin: 0.35rem 0 0.9rem;
-  height: clamp(84px, 12vw, 128px);
+  aspect-ratio: 3 / 1;
+  height: auto;
   border-radius: var(--radius);
   border: 1px solid var(--line);
   overflow: hidden;

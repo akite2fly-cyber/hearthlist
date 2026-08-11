@@ -701,6 +701,53 @@ def plan_status(household) -> dict:
     }
 
 
+def mark_household_plan(household_id: int, plan: str, subscription_id: str | None = None, customer_id: str | None = None) -> None:
+    db = get_db()
+    if subscription_id and customer_id:
+        db.execute(
+            """
+            UPDATE households
+            SET plan = ?, stripe_subscription_id = ?, stripe_customer_id = COALESCE(stripe_customer_id, ?)
+            WHERE id = ?
+            """,
+            (plan, subscription_id, customer_id, household_id),
+        )
+    elif subscription_id:
+        db.execute(
+            "UPDATE households SET plan = ?, stripe_subscription_id = ? WHERE id = ?",
+            (plan, subscription_id, household_id),
+        )
+    else:
+        db.execute("UPDATE households SET plan = ? WHERE id = ?", (plan, household_id))
+    db.commit()
+
+
+def sync_household_plan_from_stripe(household) -> None:
+    """If Stripe already has a subscription, reflect it locally (covers missed webhooks)."""
+    if not household or not stripe or not os.environ.get("STRIPE_SECRET_KEY"):
+        return
+    customer_id = household["stripe_customer_id"]
+    if not customer_id:
+        return
+    try:
+        subs = stripe.Subscription.list(customer=customer_id, status="all", limit=10)
+    except Exception as exc:  # pragma: no cover
+        print(f"Stripe subscription sync failed: {exc}")
+        return
+    chosen = None
+    for sub in subs.data:
+        if sub.get("status") in ("active", "trialing", "past_due"):
+            chosen = sub
+            break
+    if not chosen and subs.data:
+        chosen = subs.data[0]
+    if not chosen:
+        return
+    status = chosen.get("status") or ""
+    plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
+    mark_household_plan(int(household["id"]), plan, chosen.get("id"), customer_id)
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -988,7 +1035,27 @@ def home(household, user):
 @login_required
 @require_household
 def account(household, user):
+    if request.args.get("checkout") == "cancel":
+        flash("Checkout canceled. Your trial is unchanged.", "ok")
+    session_id = (request.args.get("session_id") or "").strip()
+    if stripe and os.environ.get("STRIPE_SECRET_KEY") and session_id:
+        try:
+            checkout = stripe.checkout.Session.retrieve(session_id)
+            household_id = (checkout.get("metadata") or {}).get("household_id")
+            if household_id and int(household_id) == int(household["id"]):
+                mark_household_plan(
+                    int(household["id"]),
+                    "active",
+                    checkout.get("subscription"),
+                    checkout.get("customer"),
+                )
+        except Exception as exc:  # pragma: no cover
+            print(f"Checkout session lookup failed: {exc}")
+    sync_household_plan_from_stripe(household)
+    household = user_household(user["id"]) or household
     status = plan_status(household)
+    if request.args.get("checkout") == "success" and status.get("subscribed"):
+        flash("Subscription is active. Thank you!", "ok")
     return render_template("account.html", household=household, user=user, status=status)
 
 
@@ -1722,8 +1789,9 @@ def billing_checkout(household, user):
         mode="subscription",
         customer=customer_id,
         line_items=[{"price": price_id, "quantity": 1}],
-        success_url=base + url_for("account") + "?checkout=success",
+        success_url=base + url_for("account") + "?checkout=success&session_id={CHECKOUT_SESSION_ID}",
         cancel_url=base + url_for("account") + "?checkout=cancel",
+        client_reference_id=str(household["id"]),
         metadata={"household_id": str(household["id"])},
     )
     return redirect(session_obj.url, code=303)
@@ -1758,33 +1826,42 @@ def billing_webhook():
     except Exception:
         return jsonify({"error": "Invalid payload"}), 400
 
-    db = get_db()
-    etype = event["type"]
-    data = event["data"]["object"]
+    etype = (event.get("type") or "").replace("v1.", "", 1)
+    data = (event.get("data") or {}).get("object") or {}
 
     if etype == "checkout.session.completed":
-        household_id = (data.get("metadata") or {}).get("household_id")
-        sub_id = data.get("subscription")
-        cust = data.get("customer")
-        if household_id:
-            db.execute(
-                """
-                UPDATE households
-                SET plan = 'active', stripe_subscription_id = ?, stripe_customer_id = COALESCE(stripe_customer_id, ?)
-                WHERE id = ?
-                """,
-                (sub_id, cust, int(household_id)),
+        if data.get("object") == "checkout.session" or data.get("id", "").startswith("cs_"):
+            session_obj = data
+            if not session_obj.get("metadata") and session_obj.get("id") and stripe:
+                try:
+                    session_obj = stripe.checkout.Session.retrieve(session_obj["id"])
+                except Exception:
+                    pass
+            household_id = (session_obj.get("metadata") or {}).get("household_id") or session_obj.get(
+                "client_reference_id"
             )
-            db.commit()
+            if household_id:
+                mark_household_plan(
+                    int(household_id),
+                    "active",
+                    session_obj.get("subscription"),
+                    session_obj.get("customer"),
+                )
     elif etype in ("customer.subscription.updated", "customer.subscription.deleted"):
         sub_id = data.get("id")
+        if sub_id and not data.get("status") and stripe:
+            try:
+                data = stripe.Subscription.retrieve(sub_id)
+            except Exception:
+                pass
         status = data.get("status")
         plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
-        db.execute(
-            "UPDATE households SET plan = ? WHERE stripe_subscription_id = ?",
-            (plan, sub_id),
-        )
-        db.commit()
+        if sub_id:
+            get_db().execute(
+                "UPDATE households SET plan = ? WHERE stripe_subscription_id = ?",
+                (plan, sub_id),
+            )
+            get_db().commit()
 
     return jsonify({"ok": True})
 

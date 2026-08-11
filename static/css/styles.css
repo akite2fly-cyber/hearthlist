@@ -776,7 +776,7 @@ a {
 }
 
 body.page-app {
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .app-top {
@@ -894,15 +894,15 @@ body.page-app {
 }
 
 .app-hero-band {
-  width: 100vw;
-  max-width: 100vw;
+  width: 100%;
+  max-width: 100%;
   margin: 0.35rem 0 1rem;
-  margin-left: calc(50% - 50vw);
-  height: clamp(110px, 18vw, 200px);
-  border-radius: 0;
+  height: clamp(120px, 16vw, 180px);
+  border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: none;
+  box-shadow: var(--shadow);
   position: relative;
+  background: #d7cfc0;
 }
 
 .app-hero-band::after {
@@ -911,19 +911,26 @@ body.page-app {
   inset: 0;
   background: linear-gradient(
     90deg,
-    rgba(28, 42, 36, 0.18),
-    transparent 35%,
-    transparent 65%,
-    rgba(28, 42, 36, 0.12)
+    rgba(28, 42, 36, 0.14),
+    transparent 40%,
+    transparent 60%,
+    rgba(28, 42, 36, 0.1)
   );
   pointer-events: none;
+  z-index: 1;
 }
 
 .app-hero-band img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 45%;
+  object-position: center;
+  display: block;
+  transition: opacity 160ms ease;
+}
+
+.app-hero-band img.is-fading {
+  opacity: 0;
 }
 
 .tabs {

@@ -27,7 +27,9 @@
 
 <div class="app-hero-band" aria-hidden="true">
   <img
-    src="https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=2400&h=600&q=80"
+    id="app-hero-image"
+    data-tab="groceries"
+    src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1600&h=480&q=80"
     alt=""
   />
 </div>
@@ -47,7 +49,6 @@
         <h2>Grocery list</h2>
         <p class="hint">Everyone sees the same list.</p>
       </div>
-      <img class="panel-thumb" src="https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=400&q=80" alt="" />
     </div>
     <form id="grocery-form" class="inline-form">
       <input id="grocery-input" type="text" placeholder="Add milk, bread, berries…" maxlength="200" required />
@@ -62,7 +63,6 @@
         <h2>This week’s meals</h2>
         <p class="hint">Type meal names in the grid. Use Recipe for links and ingredients.</p>
       </div>
-      <img class="panel-thumb" src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=400&q=80" alt="" />
     </div>
     <div id="meals-grid" class="meals-grid"></div>
   </section>
@@ -75,7 +75,6 @@
       </div>
       <div class="panel-head-actions">
         <button type="button" class="btn btn-ghost" id="print-chores">Print month calendar</button>
-        <img class="panel-thumb" src="https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=400&q=80" alt="" />
       </div>
     </div>
     <form id="chore-form" class="chore-form no-print">

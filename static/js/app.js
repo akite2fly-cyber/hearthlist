@@ -7,6 +7,46 @@ const panels = {
   people: document.getElementById("panel-people"),
 };
 
+const TAB_HERO_IMAGES = {
+  groceries:
+    "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1600&h=480&q=80",
+  meals:
+    "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1600&h=480&q=80",
+  chores:
+    "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1600&h=480&q=80",
+  reminders:
+    "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=1600&h=480&q=80",
+  people:
+    "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1600&h=480&q=80",
+};
+
+function setTabHero(name) {
+  const img = document.getElementById("app-hero-image");
+  const next = TAB_HERO_IMAGES[name];
+  if (!img || !next || img.dataset.tab === name) return;
+  img.classList.add("is-fading");
+  window.setTimeout(() => {
+    img.src = next;
+    img.dataset.tab = name;
+    img.classList.remove("is-fading");
+  }, 140);
+}
+
+function showTab(name) {
+  tabs.forEach((tab) => {
+    const active = tab.dataset.tab === name;
+    tab.classList.toggle("is-active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  });
+  Object.entries(panels).forEach(([key, panel]) => {
+    if (!panel) return;
+    const active = key === name;
+    panel.classList.toggle("is-active", active);
+    panel.hidden = !active;
+  });
+  setTabHero(name);
+}
+
 const WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const CHORE_MOTIVATORS = [
@@ -30,20 +70,6 @@ const CHORE_MOTIVATORS = [
 
 function pickChoreMotivator() {
   return CHORE_MOTIVATORS[Math.floor(Math.random() * CHORE_MOTIVATORS.length)];
-}
-
-function showTab(name) {
-  tabs.forEach((tab) => {
-    const active = tab.dataset.tab === name;
-    tab.classList.toggle("is-active", active);
-    tab.setAttribute("aria-selected", active ? "true" : "false");
-  });
-  Object.entries(panels).forEach(([key, panel]) => {
-    if (!panel) return;
-    const active = key === name;
-    panel.classList.toggle("is-active", active);
-    panel.hidden = !active;
-  });
 }
 
 tabs.forEach((tab) => {

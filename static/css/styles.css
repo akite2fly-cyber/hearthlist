@@ -1673,7 +1673,6 @@ body.page-app {
   .banner,
   .auth-photo,
   .mobile-cta,
-  .chore-groups,
   .panel-head,
   #reminder-popup,
   #meal-editor,
@@ -1683,13 +1682,19 @@ body.page-app {
     display: none !important;
   }
 
+  /* Styled calendar print hides the on-screen chore list */
+  body.printing-chores .chore-groups {
+    display: none !important;
+  }
+
   body.printing-chores #panel-groceries,
   body.printing-groceries #panel-chores {
     display: none !important;
   }
 
   body.printing-chores #panel-chores,
-  body.printing-groceries #panel-groceries {
+  body.printing-groceries #panel-groceries,
+  body:not(.printing-chores):not(.printing-groceries) #panel-chores.is-active {
     display: block !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -1712,19 +1717,6 @@ body.page-app {
 
   .app-top {
     display: none !important;
-  }
-
-  #panel-chores {
-    display: none !important;
-  }
-
-  body.printing-chores #panel-chores {
-    display: block !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
   }
 
   body.printing-chores .chore-print-calendar,

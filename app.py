@@ -745,7 +745,7 @@ def mark_household_plan(household_id: int, plan: str, subscription_id: str | Non
 
 
 def sync_household_plan_from_stripe(household) -> None:
-    """If Stripe already has a subscription, reflect it locally (covers missed webhooks)."""
+    """Reflect Stripe subscription state locally (covers missed webhooks, including cancels)."""
     if not household or not stripe or not os.environ.get("STRIPE_SECRET_KEY"):
         return
     customer_id = household["stripe_customer_id"]
@@ -765,7 +765,11 @@ def sync_household_plan_from_stripe(household) -> None:
                 break
         if not chosen and records:
             chosen = records[0]
+        local_plan = (household["plan"] or "").strip()
+        looks_subscribed = local_plan in ("active", "past_due") or bool(household["stripe_subscription_id"])
         if not chosen:
+            if looks_subscribed:
+                mark_household_plan(int(household["id"]), "canceled", household["stripe_subscription_id"], customer_id)
             return
         status = stripe_val(chosen, "status") or ""
         plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
@@ -1084,10 +1088,10 @@ def account(household, user):
             except Exception as exc:  # pragma: no cover
                 print(f"Checkout session lookup failed: {exc}")
         status = plan_status(household)
-        if not status.get("subscribed"):
-            sync_household_plan_from_stripe(household)
-            household = user_household(user["id"]) or household
-            status = plan_status(household)
+        # Always reconcile with Stripe so cancels/missed webhooks update an already-active plan.
+        sync_household_plan_from_stripe(household)
+        household = user_household(user["id"]) or household
+        status = plan_status(household)
         if request.args.get("checkout") == "success" and status.get("subscribed"):
             flash("Subscription is active. Thank you!", "ok")
         return render_template("account.html", household=household, user=user, status=status)

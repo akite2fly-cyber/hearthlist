@@ -440,11 +440,17 @@ function openMealEditor(slot) {
   ui.title.focus();
 }
 
+function normalizeRecipeUrl(value) {
+  const v = (value || "").trim();
+  if (!v) return "";
+  return /^https?:\/\//i.test(v) ? v : `https://${v}`;
+}
+
 async function saveMealEditor() {
   if (!mealEditorState) return;
   const ui = mealEditorEls();
   const title = ui.title.value.trim();
-  const recipe_url = ui.url.value.trim();
+  const recipe_url = normalizeRecipeUrl(ui.url.value);
   const ingredients = collectMealIngredients();
   await saveMealSlot(
     {
@@ -484,7 +490,7 @@ async function addCheckedIngredientsToGroceries() {
         date: mealEditorState.date,
         meal_type: mealEditorState.meal_type,
         title: mealEditorEls().title.value.trim(),
-        recipe_url: mealEditorEls().url.value.trim(),
+        recipe_url: normalizeRecipeUrl(mealEditorEls().url.value),
         ingredients: collectMealIngredients(),
         notes: "",
       }),
@@ -1321,8 +1327,10 @@ Promise.all([loadGroceries(), loadMeals(), loadChores(), loadReminders()])
     checkDueReminders();
     setInterval(checkDueReminders, 60 * 1000);
   })
-  .catch(() => {
-    /* panels may not exist on other pages */
+  .catch((err) => {
+    if (!document.getElementById("panel-groceries")) return;
+    console.error(err);
+    alert(err?.message || "Could not load your household data. Refresh and try again.");
   });
 
 const inviteCard = document.getElementById("invite-card");

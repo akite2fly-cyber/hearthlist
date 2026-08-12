@@ -170,8 +170,8 @@ function groceryFoodIcon(title) {
   const t = (title || "").toLowerCase();
   if (/milk|cheese|yogurt|butter|cream|egg/.test(t)) return "🥛";
   if (/bread|bagel|bun|tortilla|bakery/.test(t)) return "🍞";
-  if (/apple|berry|berries|banana|fruit|orange|grape|lemon/.test(t)) return "🍓";
-  if (/lettuce|salad|spinach|broccoli|carrot|veg|onion|tomato|potato|garlic/.test(t)) return "🥬";
+  if (/apple|berry|berries|banana|fruit|orange|grape|lemon|lime|peach|pear|mango|melon/.test(t)) return "🍓";
+  if (/lettuce|salad|spinach|broccoli|carrot|veg|onion|tomato|potato|garlic|mushroom|pepper|cucumber|celery|zucchini|avocado|kale|cabbage|corn|asparagus|produce/.test(t)) return "🥬";
   if (/chicken|beef|pork|turkey|fish|salmon|meat|bacon/.test(t)) return "🍗";
   if (/coffee|tea|juice|soda|water|wine/.test(t)) return "☕";
   if (/rice|pasta|flour|oil|sauce|spice|cereal|oat|bean|can/.test(t)) return "🫙";
@@ -184,7 +184,7 @@ function groceryAisle(title) {
   const t = (title || "").toLowerCase();
   if (/milk|cheese|yogurt|butter|cream|egg/.test(t)) return "Dairy & eggs";
   if (/bread|bagel|bun|tortilla/.test(t)) return "Bakery";
-  if (/apple|berry|berries|banana|fruit|orange|grape|lemon|lettuce|salad|spinach|broccoli|carrot|veg|onion|tomato|potato|garlic|herb/.test(t))
+  if (/apple|berry|berries|banana|fruit|orange|grape|lemon|lime|peach|pear|mango|melon|lettuce|salad|spinach|broccoli|carrot|veg|onion|tomato|potato|garlic|herb|mushroom|pepper|cucumber|celery|zucchini|avocado|kale|cabbage|corn|asparagus|produce/.test(t))
     return "Produce";
   if (/chicken|beef|pork|turkey|fish|salmon|meat|bacon/.test(t)) return "Meat & fish";
   if (/ice|frozen|pizza/.test(t)) return "Frozen";

@@ -798,12 +798,36 @@ async function loadChores() {
     const openCount = groupItems.filter((i) => !i.done).length;
     const section = el("section", "chore-group");
     section.dataset.assignee = name;
-    const colorIdx = assigneeColorIndex(name);
-    section.classList.add(`chore-color-${colorIdx}`);
+    section.classList.add(assigneeColorClass(name));
 
     const head = el("div", "chore-group-head");
     const titleWrap = el("div", "chore-group-title");
     titleWrap.appendChild(el("h3", "chore-group-name", name));
+    if (name !== "Unassigned") {
+      const current = getAssigneeColorId(name);
+      const swatches = el("div", "chore-color-pick no-print");
+      swatches.setAttribute("role", "group");
+      swatches.setAttribute("aria-label", `Color for ${name}`);
+      for (const color of CHORE_PERSON_COLORS) {
+        const swatch = el(
+          "button",
+          current === color.id
+            ? `chore-color-swatch chore-swatch-${color.id} is-active`
+            : `chore-color-swatch chore-swatch-${color.id}`,
+          ""
+        );
+        swatch.type = "button";
+        swatch.title = color.label;
+        swatch.setAttribute("aria-label", color.label);
+        swatch.addEventListener("click", (e) => {
+          e.preventDefault();
+          setAssigneeColorId(name, color.id);
+          loadChores();
+        });
+        swatches.appendChild(swatch);
+      }
+      titleWrap.appendChild(swatches);
+    }
     head.appendChild(titleWrap);
     head.appendChild(
       el("span", "chore-group-count", openCount ? `${openCount} open` : "All done")
@@ -819,10 +843,72 @@ async function loadChores() {
   }
 }
 
-function assigneeColorIndex(name) {
+const CHORE_PERSON_COLORS = [
+  { id: "blue", label: "Blue" },
+  { id: "sky", label: "Sky" },
+  { id: "pink", label: "Pink" },
+  { id: "rose", label: "Rose" },
+  { id: "green", label: "Green" },
+  { id: "teal", label: "Teal" },
+  { id: "gold", label: "Gold" },
+  { id: "coral", label: "Coral" },
+];
+
+const ASSIGNEE_COLOR_KEY = "hearthlist-assignee-colors";
+
+function loadAssigneeColors() {
+  try {
+    const raw = localStorage.getItem(ASSIGNEE_COLOR_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveAssigneeColors(map) {
+  try {
+    localStorage.setItem(ASSIGNEE_COLOR_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function nameStyleHash(name, mod) {
   let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i) * (i + 1)) % 6;
+  const key = (name || "").trim().toLowerCase();
+  for (let i = 0; i < key.length; i++) hash = (hash + key.charCodeAt(i) * (i + 1)) % mod;
   return hash;
+}
+
+function getAssigneeColorId(name) {
+  const key = (name || "").trim();
+  if (!key || key === "Unassigned") return "neutral";
+  const saved = loadAssigneeColors()[key];
+  if (CHORE_PERSON_COLORS.some((c) => c.id === saved)) return saved;
+  return CHORE_PERSON_COLORS[nameStyleHash(key, CHORE_PERSON_COLORS.length)].id;
+}
+
+function setAssigneeColorId(name, colorId) {
+  const key = (name || "").trim();
+  if (!key || key === "Unassigned") return;
+  if (!CHORE_PERSON_COLORS.some((c) => c.id === colorId)) return;
+  const map = loadAssigneeColors();
+  map[key] = colorId;
+  saveAssigneeColors(map);
+}
+
+function assigneeColorClass(name) {
+  const key = (name || "").trim() || "Unassigned";
+  if (key === "Unassigned") return "chore-person-neutral";
+  return `chore-person-${getAssigneeColorId(key)}`;
+}
+
+function chorePrintLabel(item) {
+  const title = (item.title || "").trim() || "Chore";
+  const who = (item.assignee || "").trim();
+  if (!who || who === "Unassigned") return title;
+  return `${title} · ${who}`;
 }
 
 function buildChoreRow(item) {
@@ -982,7 +1068,7 @@ function buildPrintCalendar(items) {
   ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
   const legend = el("div", "chore-cal-legend");
   for (const name of people) {
-    const chip = el("span", `chore-cal-chip chore-color-${assigneeColorIndex(name)}`);
+    const chip = el("span", `chore-cal-chip ${assigneeColorClass(name)}`);
     chip.textContent = name;
     legend.appendChild(chip);
   }
@@ -1005,12 +1091,9 @@ function buildPrintCalendar(items) {
     const dayItems = allDayItems.slice(0, 3);
     for (const item of dayItems) {
       const who = (item.assignee || "").trim() || "Unassigned";
-      const row = el(
-        "div",
-        `chore-cal-entry chore-color-${assigneeColorIndex(who)}`
-      );
+      const row = el("div", `chore-cal-entry ${assigneeColorClass(who)}`);
       row.appendChild(el("span", "chore-cal-check", ""));
-      row.appendChild(el("span", "chore-cal-entry-text", item.title));
+      row.appendChild(el("span", "chore-cal-entry-text", chorePrintLabel(item)));
       cell.appendChild(row);
     }
     if (allDayItems.length > 3) {
@@ -1054,7 +1137,7 @@ function buildPrintWeekChart(items) {
 
   const legend = el("div", "chore-cal-legend");
   for (const name of people) {
-    const chip = el("span", `chore-cal-chip chore-color-${assigneeColorIndex(name)}`);
+    const chip = el("span", `chore-cal-chip ${assigneeColorClass(name)}`);
     chip.textContent = name;
     legend.appendChild(chip);
   }
@@ -1072,10 +1155,9 @@ function buildPrintWeekChart(items) {
     const dayItems = choresForCalendarDay(items, day);
     for (const item of dayItems) {
       const who = (item.assignee || "").trim() || "Unassigned";
-      const row = el("div", `chore-cal-entry chore-color-${assigneeColorIndex(who)}`);
+      const row = el("div", `chore-cal-entry ${assigneeColorClass(who)}`);
       row.appendChild(el("span", "chore-cal-check", ""));
-      const label = who !== "Unassigned" ? `${item.title} · ${who}` : item.title;
-      row.appendChild(el("span", "chore-cal-entry-text", label));
+      row.appendChild(el("span", "chore-cal-entry-text", chorePrintLabel(item)));
       cell.appendChild(row);
     }
     if (!dayItems.length) {

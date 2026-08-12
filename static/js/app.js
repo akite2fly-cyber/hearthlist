@@ -1283,6 +1283,8 @@ function notifiedKey(id) {
   return `hearthlist-notified-${id}-${today}`;
 }
 
+const NOTIFY_PREF_KEY = "hearthlist-system-notifications";
+
 async function ensureServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
   try {
@@ -1301,32 +1303,59 @@ function isIosDevice() {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
+function systemNotificationsWanted() {
+  const saved = localStorage.getItem(NOTIFY_PREF_KEY);
+  if (saved === "1" || saved === "0") return saved === "1";
+  // Migrate older preference key if present.
+  if (localStorage.getItem("hearthlist-reminders-enabled") === "1") return true;
+  return false;
+}
+
+function setSystemNotificationsWanted(on) {
+  localStorage.setItem(NOTIFY_PREF_KEY, on ? "1" : "0");
+}
+
 function updateNotifyStatus() {
   const status = document.getElementById("notify-permission-status");
-  const button = document.getElementById("enable-notifications");
+  const toggle = document.getElementById("notify-toggle");
   if (!status) return;
+
+  const wanted = systemNotificationsWanted();
+  if (toggle) {
+    if (!supportsSystemNotifications()) {
+      toggle.checked = false;
+      toggle.disabled = true;
+    } else if (Notification.permission === "denied") {
+      toggle.checked = false;
+      toggle.disabled = false;
+    } else {
+      toggle.disabled = false;
+      toggle.checked = wanted && Notification.permission === "granted";
+    }
+  }
 
   if (!supportsSystemNotifications()) {
     status.textContent = isIosDevice()
-      ? "On iPhone, Safari can’t do lock-screen alerts from a normal tab. Reminder popups still work inside Hearthlist while the app is open. For system alerts: Share → Add to Home Screen, then open Hearthlist from that icon (iOS 16.4+)."
-      : "This browser can’t show lock-screen notifications. Reminder popups still work inside Hearthlist while the page is open.";
-    if (button) button.textContent = "Show a test popup";
+      ? "This browser tab can’t do lock-screen alerts. In-app popups still work while Hearthlist is open. On iPhone: Add to Home Screen, then open from that icon (iOS 16.4+)."
+      : "This browser can’t show lock-screen notifications. In-app popups still work while Hearthlist is open.";
     return;
   }
 
-  if (Notification.permission === "granted") {
-    status.textContent = "System notifications are on. You’ll also get an in-app popup.";
-    if (button) button.textContent = "Send test notification";
-  } else if (Notification.permission === "denied") {
-    status.textContent = "Notifications are blocked in browser settings. In-app popups still work while Hearthlist is open.";
-    if (button) button.textContent = "Show a test popup";
-  } else {
-    status.textContent = "Allow notifications for lock-screen alerts, or rely on in-app popups while Hearthlist is open.";
-    if (button) button.textContent = "Turn on reminder popups";
+  if (Notification.permission === "denied") {
+    status.textContent = "Blocked in browser settings. In-app popups still work while Hearthlist is open.";
+    return;
   }
+
+  if (wanted && Notification.permission === "granted") {
+    status.textContent = "On — lock-screen alerts when Hearthlist can reach you. In-app popups still work while open.";
+    return;
+  }
+
+  status.textContent = "Off — turn on for lock-screen alerts. In-app popups still work while Hearthlist is open.";
 }
 
 async function showBrowserNotification(title, body, tag) {
+  if (!systemNotificationsWanted()) return;
   if (!supportsSystemNotifications() || Notification.permission !== "granted") return;
   const reg = await ensureServiceWorker();
   if (reg && reg.active) {
@@ -1356,31 +1385,60 @@ document.getElementById("reminder-popup-close")?.addEventListener("click", () =>
   if (popup) popup.hidden = true;
 });
 
-document.getElementById("enable-notifications")?.addEventListener("click", async () => {
-  localStorage.setItem("hearthlist-reminders-enabled", "1");
+document.getElementById("test-reminder-popup")?.addEventListener("click", async () => {
+  showReminderPopup([{ title: "Test reminder", notify_time: "now" }]);
+  if (systemNotificationsWanted() && supportsSystemNotifications() && Notification.permission === "granted") {
+    await showBrowserNotification(
+      "Test reminder",
+      "Hearthlist system notifications are working.",
+      "hearthlist-test"
+    );
+  }
+});
 
-  // Always prove in-app popup works (especially on iPhone Safari).
-  showReminderPopup([
-    { title: "Reminder popups are ready", notify_time: "now" },
-  ]);
+document.getElementById("notify-toggle")?.addEventListener("change", async (e) => {
+  const toggle = e.target;
+  const turnOn = !!toggle.checked;
+
+  if (!turnOn) {
+    setSystemNotificationsWanted(false);
+    updateNotifyStatus();
+    return;
+  }
 
   if (!supportsSystemNotifications()) {
+    setSystemNotificationsWanted(false);
+    toggle.checked = false;
     updateNotifyStatus();
     return;
   }
 
   await ensureServiceWorker();
+  if (Notification.permission === "denied") {
+    setSystemNotificationsWanted(false);
+    toggle.checked = false;
+    updateNotifyStatus();
+    alert("Notifications are blocked in your browser settings. You can still use in-app popups while Hearthlist is open.");
+    return;
+  }
+
   if (Notification.permission !== "granted") {
     await Notification.requestPermission();
   }
-  updateNotifyStatus();
+
   if (Notification.permission === "granted") {
+    setSystemNotificationsWanted(true);
+    updateNotifyStatus();
     await showBrowserNotification(
-      "Hearthlist reminders on",
-      "We’ll also pop up inside the app for garbage day and other reminders.",
+      "Hearthlist notifications on",
+      "You’ll get lock-screen alerts when a reminder is due (while this browser can deliver them).",
       "hearthlist-enabled"
     );
     checkDueReminders();
+  } else {
+    setSystemNotificationsWanted(false);
+    toggle.checked = false;
+    updateNotifyStatus();
   }
 });
 

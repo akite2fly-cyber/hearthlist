@@ -1349,9 +1349,86 @@ body.page-app {
 .notify-enable {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
+  gap: 0.85rem 1rem;
   align-items: center;
+  justify-content: space-between;
   margin-bottom: 0.9rem;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.notify-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+  min-width: min(100%, 18rem);
+  flex: 1 1 16rem;
+}
+
+.notify-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.notify-toggle-ui {
+  position: relative;
+  flex: 0 0 auto;
+  width: 2.7rem;
+  height: 1.55rem;
+  margin-top: 0.15rem;
+  border-radius: 999px;
+  background: rgba(28, 42, 36, 0.18);
+  transition: background 0.15s ease;
+}
+
+.notify-toggle-ui::after {
+  content: "";
+  position: absolute;
+  top: 0.18rem;
+  left: 0.18rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(28, 42, 36, 0.2);
+  transition: transform 0.15s ease;
+}
+
+.notify-toggle input:checked + .notify-toggle-ui {
+  background: var(--accent);
+}
+
+.notify-toggle input:checked + .notify-toggle-ui::after {
+  transform: translateX(1.15rem);
+}
+
+.notify-toggle input:focus-visible + .notify-toggle-ui {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.notify-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.notify-toggle-copy strong {
+  font-size: 0.95rem;
+}
+
+.notify-toggle-copy .hint {
+  margin: 0;
+}
+
+.notify-enable .btn {
+  flex: 0 0 auto;
 }
 
 .reminder-popup {

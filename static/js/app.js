@@ -537,12 +537,10 @@ async function saveMealSlot(slot, patch = {}) {
 async function loadMeals() {
   const grid = document.getElementById("meals-grid");
   if (!grid) return;
+  const openDay = grid.querySelector(".meal-day-box.is-open")?.dataset?.date || "";
   const data = await api("/api/meals");
+  grid.className = "meals-week";
   grid.innerHTML = "";
-  grid.appendChild(el("div", "meal-head", ""));
-  ["Breakfast", "Lunch", "Dinner"].forEach((label) => {
-    grid.appendChild(el("div", "meal-head", label));
-  });
 
   const byDate = {};
   for (const slot of data.slots) {
@@ -550,18 +548,35 @@ async function loadMeals() {
     byDate[slot.date][slot.meal_type] = slot;
   }
 
-  const closeOtherMealCells = (keep) => {
-    grid.querySelectorAll(".meal-cell.is-open").forEach((openCell) => {
-      if (openCell !== keep) {
-        openCell.classList.remove("is-open");
-        const openInput = openCell.querySelector(".meal-cell-input");
-        if (openInput === document.activeElement) openInput.blur();
+  const closeOtherDays = (keep) => {
+    grid.querySelectorAll(".meal-day-box.is-open").forEach((box) => {
+      if (box !== keep) {
+        box.classList.remove("is-open");
+        box.querySelector(".meal-day-toggle")?.setAttribute("aria-expanded", "false");
       }
     });
   };
 
   for (const day of data.week) {
-    grid.appendChild(el("div", "meal-day", weekdayLabel(day)));
+    const dayBox = el("section", "meal-day-box");
+    dayBox.dataset.date = day;
+
+    const toggle = el("button", "meal-day-toggle", "");
+    toggle.type = "button";
+    toggle.setAttribute("aria-expanded", "false");
+    const dayName = weekdayLabel(day);
+    toggle.setAttribute("aria-label", `Open ${dayName} meals`);
+
+    const toggleMain = el("div", "meal-day-toggle-main");
+    toggleMain.appendChild(el("span", "meal-day-name", dayName));
+    const preview = el("span", "meal-day-preview", "");
+    toggleMain.appendChild(preview);
+    toggle.appendChild(toggleMain);
+    toggle.appendChild(el("span", "meal-day-chevron", "▸"));
+
+    const slotsWrap = el("div", "meal-day-slots");
+    const planned = [];
+
     for (const type of ["breakfast", "lunch", "dinner"]) {
       const slot = byDate[day]?.[type] || {
         date: day,
@@ -572,40 +587,31 @@ async function loadMeals() {
       };
       byDate[day] = byDate[day] || {};
       byDate[day][type] = slot;
+      if (slot.title) planned.push(slot.title);
 
       const cell = el("div", "meal-cell");
-      const summary = el("button", "meal-cell-summary", "");
-      summary.type = "button";
-      summary.setAttribute(
-        "aria-label",
-        `Open ${weekdayLabel(day)} ${MEAL_TYPE_LABELS[type] || type}`
-      );
-      const summaryTitle = el("span", "meal-cell-summary-title", slot.title || "Add meal…");
-      if (!slot.title) summaryTitle.classList.add("is-empty");
-      summary.appendChild(summaryTitle);
+      const typeLabel = el("div", "meal-cell-type", MEAL_TYPE_LABELS[type] || type);
 
-      const plan = el("div", "meal-cell-plan");
       const input = document.createElement("input");
       input.type = "text";
       input.className = "meal-cell-input";
       input.maxLength = 200;
       input.placeholder = "Add meal…";
       input.value = slot.title || "";
-      input.setAttribute(
-        "aria-label",
-        `${weekdayLabel(day)} ${MEAL_TYPE_LABELS[type] || type}`
-      );
+      input.setAttribute("aria-label", `${dayName} ${MEAL_TYPE_LABELS[type] || type}`);
 
       let lastSaved = slot.title || "";
-      const syncSummaryTitle = () => {
-        const next = input.value.trim();
-        summaryTitle.textContent = next || "Add meal…";
-        summaryTitle.classList.toggle("is-empty", !next);
+      const refreshDayPreview = () => {
+        const titles = ["breakfast", "lunch", "dinner"]
+          .map((t) => (byDate[day]?.[t]?.title || "").trim())
+          .filter(Boolean);
+        preview.textContent = titles.length ? titles.join(" · ") : "No meals yet";
+        preview.classList.toggle("is-empty", !titles.length);
       };
       const persistTitle = async () => {
         const next = input.value.trim();
         if (next === lastSaved) {
-          syncSummaryTitle();
+          refreshDayPreview();
           return;
         }
         input.classList.add("is-saving");
@@ -613,11 +619,12 @@ async function loadMeals() {
           await saveMealSlot(slot, { title: next });
           lastSaved = next;
           input.value = next;
-          syncSummaryTitle();
+          refreshDayPreview();
           refreshMealCellCues(cell, slot);
         } catch (err) {
           input.value = lastSaved;
-          syncSummaryTitle();
+          slot.title = lastSaved;
+          refreshDayPreview();
           alert(err.message || "Could not save meal.");
         } finally {
           input.classList.remove("is-saving");
@@ -631,15 +638,16 @@ async function loadMeals() {
         }
         if (e.key === "Escape") {
           input.value = lastSaved;
-          syncSummaryTitle();
-          cell.classList.remove("is-open");
           input.blur();
         }
       });
       input.addEventListener("blur", () => {
         persistTitle();
       });
-      input.addEventListener("input", syncSummaryTitle);
+      input.addEventListener("input", () => {
+        slot.title = input.value.trim();
+        refreshDayPreview();
+      });
 
       const actions = el("div", "meal-cell-actions");
       const details = el("button", "meal-cell-details", "Recipe links");
@@ -650,36 +658,40 @@ async function loadMeals() {
         e.stopPropagation();
         openMealEditor(slot);
       });
-      const done = el("button", "meal-cell-done", "Done");
-      done.type = "button";
-      done.title = "Close this meal box";
-      done.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        await persistTitle();
-        cell.classList.remove("is-open");
-      });
       actions.appendChild(details);
-      actions.appendChild(done);
 
-      plan.appendChild(input);
-      plan.appendChild(actions);
+      const body = el("div", "meal-cell-body");
+      body.appendChild(input);
+      body.appendChild(actions);
 
-      summary.addEventListener("click", (e) => {
-        e.preventDefault();
-        const opening = !cell.classList.contains("is-open");
-        closeOtherMealCells(cell);
-        cell.classList.toggle("is-open", opening);
-        if (opening) {
-          requestAnimationFrame(() => input.focus());
-        }
-      });
-
-      cell.appendChild(summary);
-      cell.appendChild(plan);
+      cell.appendChild(typeLabel);
+      cell.appendChild(body);
       refreshMealCellCues(cell, slot);
-      grid.appendChild(cell);
+      slotsWrap.appendChild(cell);
     }
+
+    preview.textContent = planned.length ? planned.join(" · ") : "No meals yet";
+    preview.classList.toggle("is-empty", !planned.length);
+
+    toggle.addEventListener("click", () => {
+      const opening = !dayBox.classList.contains("is-open");
+      closeOtherDays(dayBox);
+      dayBox.classList.toggle("is-open", opening);
+      toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+      if (opening) {
+        requestAnimationFrame(() => {
+          slotsWrap.querySelector(".meal-cell-input")?.focus();
+        });
+      }
+    });
+
+    dayBox.appendChild(toggle);
+    dayBox.appendChild(slotsWrap);
+    if (openDay && openDay === day) {
+      dayBox.classList.add("is-open");
+      toggle.setAttribute("aria-expanded", "true");
+    }
+    grid.appendChild(dayBox);
   }
 }
 
@@ -690,8 +702,8 @@ function refreshMealCellCues(cell, slot) {
   const ingCount = Array.isArray(slot.ingredients) ? slot.ingredients.length : 0;
   if (ingCount) cues.appendChild(el("span", "meal-cue", `${ingCount} items`));
   if (!cues.childNodes.length) return;
-  const summary = cell.querySelector(".meal-cell-summary");
-  if (summary) summary.appendChild(cues);
+  const typeLabel = cell.querySelector(".meal-cell-type");
+  if (typeLabel) typeLabel.appendChild(cues);
   else cell.appendChild(cues);
 }
 

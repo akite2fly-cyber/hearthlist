@@ -997,6 +997,184 @@ body.page-app {
   object-fit: cover;
 }
 
+.grocery-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(280px, 1.35fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.grocery-side {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.grocery-add-form {
+  margin-bottom: 0;
+}
+
+.grocery-side-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 1.15rem 1.1rem 1.2rem;
+  color: #f7f3ea;
+  background:
+    radial-gradient(ellipse 90% 80% at 100% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
+    linear-gradient(145deg, #1f4d3a 0%, #2a6b4f 48%, #c45c26 140%);
+  box-shadow: 0 18px 40px rgba(31, 77, 58, 0.22);
+  min-height: 180px;
+}
+
+.grocery-side-card::after {
+  content: "🛒";
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.2rem;
+  font-size: 3.4rem;
+  opacity: 0.22;
+  transform: rotate(-8deg);
+  pointer-events: none;
+}
+
+.grocery-side-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.grocery-side-title {
+  margin: 0.35rem 0 0.4rem;
+  font-family: var(--font-display);
+  font-size: 1.7rem;
+  line-height: 1.1;
+}
+
+.grocery-side-copy {
+  margin: 0;
+  max-width: 18rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  opacity: 0.9;
+}
+
+.grocery-side-count {
+  display: inline-flex;
+  margin: 0.9rem 0 0;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.grocery-main {
+  min-width: 0;
+}
+
+.grocery-item-list {
+  margin: 0;
+  display: grid;
+  gap: 0.45rem;
+  max-height: min(62vh, 560px);
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.grocery-item-list .grocery-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 0.65rem;
+  align-items: center;
+  margin: 0;
+  padding: 0.7rem 0.75rem;
+  border-radius: 16px;
+  border: 1px solid rgba(196, 92, 38, 0.14);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 250, 242, 0.88));
+  box-shadow: 0 8px 22px rgba(28, 42, 36, 0.05);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.grocery-item-list .grocery-row:hover {
+  transform: translateY(-1px);
+  border-color: rgba(196, 92, 38, 0.28);
+  box-shadow: 0 12px 28px rgba(28, 42, 36, 0.08);
+}
+
+.grocery-item-list .grocery-row.is-done {
+  opacity: 0.72;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.grocery-check {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 8px;
+  border: 1.75px solid #c45c26;
+  background: #fff;
+  color: #c45c26;
+  font-weight: 800;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.grocery-row.is-done .grocery-check {
+  background: #c45c26;
+  color: #fffaf2;
+}
+
+.grocery-row-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+  width: 1.5rem;
+  text-align: center;
+}
+
+.grocery-row-body {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.grocery-row-body .item-title {
+  font-weight: 700;
+  font-size: 0.98rem;
+}
+
+.grocery-row-aisle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #1f4d3a;
+  opacity: 0.75;
+}
+
+.grocery-empty {
+  border-radius: 16px;
+  border: 1px dashed var(--line);
+  padding: 1.1rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 820px) {
+  .grocery-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .grocery-item-list {
+    max-height: none;
+  }
+}
+
 .inline-form,
 .chore-form {
   display: grid;

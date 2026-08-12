@@ -43,7 +43,7 @@
 </nav>
 
 <main class="app-panels">
-  <section class="panel is-active" id="panel-groceries" role="tabpanel">
+  <section class="panel panel-groceries is-active" id="panel-groceries" role="tabpanel">
     <div class="panel-head">
       <div>
         <h2>Grocery list</h2>
@@ -53,11 +53,23 @@
         <button type="button" class="btn btn-ghost" id="print-groceries">Print market list</button>
       </div>
     </div>
-    <form id="grocery-form" class="inline-form no-print">
-      <input id="grocery-input" type="text" placeholder="Add milk, bread, berries…" maxlength="200" required />
-      <button class="btn btn-primary" type="submit">Add</button>
-    </form>
-    <ul id="grocery-list" class="item-list"></ul>
+    <div class="grocery-layout">
+      <aside class="grocery-side no-print">
+        <form id="grocery-form" class="inline-form grocery-add-form">
+          <input id="grocery-input" type="text" placeholder="Add milk, bread, berries…" maxlength="200" required />
+          <button class="btn btn-primary" type="submit">Add</button>
+        </form>
+        <div class="grocery-side-card">
+          <p class="grocery-side-kicker">Market run</p>
+          <p class="grocery-side-title">Fill the basket</p>
+          <p class="grocery-side-copy">Add items here. Your shared list stays on the right — ready for the store.</p>
+          <p class="grocery-side-count" id="grocery-open-count">0 open</p>
+        </div>
+      </aside>
+      <div class="grocery-main">
+        <ul id="grocery-list" class="item-list grocery-item-list"></ul>
+      </div>
+    </div>
     <div id="grocery-print-sheet" class="grocery-print-sheet print-only" hidden aria-hidden="true"></div>
   </section>
 

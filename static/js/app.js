@@ -99,14 +99,20 @@ async function loadGroceries() {
   const data = await api("/api/groceries");
   window.__hearthlistGroceries = data.items || [];
   list.innerHTML = "";
+  const openCount = (data.items || []).filter((i) => !i.done).length;
+  const countEl = document.getElementById("grocery-open-count");
+  if (countEl) {
+    countEl.textContent = openCount === 1 ? "1 open" : `${openCount} open`;
+  }
   if (!data.items.length) {
-    list.appendChild(el("li", "item-meta", "No groceries yet — add your first item."));
+    list.appendChild(el("li", "item-meta grocery-empty", "No groceries yet — add your first item."));
     return;
   }
   for (const item of data.items) {
-    const li = el("li", item.done ? "is-done" : "");
-    const check = el("button", "item-check", item.done ? "✓" : "○");
+    const li = el("li", item.done ? "grocery-row is-done" : "grocery-row");
+    const check = el("button", "item-check grocery-check", item.done ? "✓" : "");
     check.type = "button";
+    check.setAttribute("aria-label", item.done ? "Mark not done" : "Mark done");
     check.addEventListener("click", async () => {
       await api(`/api/groceries/${item.id}`, {
         method: "PATCH",
@@ -114,14 +120,19 @@ async function loadGroceries() {
       });
       loadGroceries();
     });
-    const title = el("span", "item-title", item.title);
+    const icon = el("span", "grocery-row-icon", groceryFoodIcon(item.title));
+    icon.setAttribute("aria-hidden", "true");
+    const body = el("div", "grocery-row-body");
+    body.appendChild(el("span", "item-title", item.title));
+    body.appendChild(el("span", "grocery-row-aisle", groceryAisle(item.title)));
     const remove = el("button", "item-remove", "×");
     remove.type = "button";
+    remove.setAttribute("aria-label", "Remove item");
     remove.addEventListener("click", async () => {
       await api(`/api/groceries/${item.id}`, { method: "DELETE" });
       loadGroceries();
     });
-    li.append(check, title, remove);
+    li.append(check, icon, body, remove);
     list.appendChild(li);
   }
 }

@@ -47,14 +47,18 @@
     <div class="panel-head">
       <div>
         <h2>Grocery list</h2>
-        <p class="hint">Everyone sees the same list.</p>
+        <p class="hint">Everyone sees the same list — print a stylish market list for the store.</p>
+      </div>
+      <div class="panel-head-actions">
+        <button type="button" class="btn btn-ghost" id="print-groceries">Print market list</button>
       </div>
     </div>
-    <form id="grocery-form" class="inline-form">
+    <form id="grocery-form" class="inline-form no-print">
       <input id="grocery-input" type="text" placeholder="Add milk, bread, berries…" maxlength="200" required />
       <button class="btn btn-primary" type="submit">Add</button>
     </form>
     <ul id="grocery-list" class="item-list"></ul>
+    <div id="grocery-print-sheet" class="grocery-print-sheet print-only" hidden aria-hidden="true"></div>
   </section>
 
   <section class="panel" id="panel-meals" role="tabpanel" hidden>
@@ -71,10 +75,10 @@
     <div class="panel-head">
       <div>
         <h2>Chores</h2>
-        <p class="hint">Grouped by who does them — print a week chart or month calendar with a little motivator for the fridge.</p>
+        <p class="hint">Grouped by who does them — print a week or month calendar with a little motivator for the fridge.</p>
       </div>
       <div class="panel-head-actions">
-        <button type="button" class="btn btn-ghost" id="print-chores-week">Print week chart</button>
+        <button type="button" class="btn btn-ghost" id="print-chores-week">Print week calendar</button>
         <button type="button" class="btn btn-ghost" id="print-chores">Print month calendar</button>
       </div>
     </div>

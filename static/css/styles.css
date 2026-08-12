@@ -856,6 +856,10 @@ body.page-app {
   color: var(--chore-ink);
 }
 
+.grocery-print-sheet {
+  display: none;
+}
+
 .chore-print-calendar {
   display: none;
 }
@@ -1476,6 +1480,10 @@ body.page-app {
     overflow: hidden !important;
   }
 
+  body.printing-groceries {
+    overflow: hidden !important;
+  }
+
   .flash-wrap,
   .site-nav,
   .tabs,
@@ -1491,10 +1499,29 @@ body.page-app {
   .panel-head,
   #reminder-popup,
   #meal-editor,
-  #panel-groceries,
   #panel-meals,
   #panel-reminders,
   #panel-people {
+    display: none !important;
+  }
+
+  body.printing-chores #panel-groceries,
+  body.printing-groceries #panel-chores {
+    display: none !important;
+  }
+
+  body.printing-chores #panel-chores,
+  body.printing-groceries #panel-groceries {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.printing-chores #grocery-list,
+  body.printing-groceries #grocery-list {
     display: none !important;
   }
 
@@ -1510,6 +1537,10 @@ body.page-app {
   }
 
   #panel-chores {
+    display: none !important;
+  }
+
+  body.printing-chores #panel-chores {
     display: block !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -1530,9 +1561,9 @@ body.page-app {
   }
 
   body.printing-chores-week .chore-print-calendar {
-    height: auto;
-    max-height: none;
-    overflow: visible;
+    height: calc(100vh - 0.1in);
+    max-height: 7.5in;
+    overflow: hidden;
   }
 
   .chore-cal-header {
@@ -1709,97 +1740,233 @@ body.page-app {
     color: #1f4d3a;
   }
 
-  .chore-week-chart {
+  .chore-week-cal-grid {
     display: grid;
-    gap: 0.55rem;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.28rem;
     flex: 1 1 auto;
+    min-height: 0;
   }
 
-  .chore-week-person {
-    border: 1.5px solid color-mix(in srgb, var(--chore-accent) 35%, #d7cfc0);
-    border-radius: 12px;
-    padding: 0.45rem 0.5rem 0.55rem;
-    background: color-mix(in srgb, var(--chore-tint) 55%, white);
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .chore-week-person-head {
+  .chore-week-cal-day {
+    min-height: 0;
+    height: 100%;
+    border: 1.5px solid #d7cfc0;
+    border-radius: 10px;
+    padding: 0.35rem 0.3rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 250, 242, 0.92));
+    overflow: hidden;
     display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-bottom: 0.35rem;
-  }
-
-  .chore-week-person-name {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: 1.1rem;
-    color: var(--chore-ink);
-  }
-
-  .chore-week-table {
-    display: grid;
+    flex-direction: column;
     gap: 0.2rem;
   }
 
-  .chore-week-row {
-    display: grid;
-    grid-template-columns: minmax(2.2in, 1.5fr) repeat(7, 0.55fr);
-    gap: 0.18rem;
-    align-items: center;
+  .chore-week-cal-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.25rem;
+    margin-bottom: 0.15rem;
+    border-bottom: 1px solid #e5ddd0;
+    padding-bottom: 0.2rem;
   }
 
-  .chore-week-row-head {
-    font-size: 0.62rem;
+  .chore-week-cal-dow {
+    font-size: 0.72rem;
     font-weight: 800;
     color: #1f4d3a;
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
 
-  .chore-week-task {
-    font-size: 0.78rem;
-    font-weight: 700;
-    color: #1c2a24;
-    line-height: 1.2;
-  }
-
-  .chore-week-day-head,
-  .chore-week-day {
-    text-align: center;
-  }
-
-  .chore-week-day {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 0.85rem;
-  }
-
-  .chore-week-day .chore-cal-check {
-    width: 0.72rem;
-    height: 0.72rem;
+  .chore-week-cal-day .chore-cal-daynum {
+    font-size: 1.05rem;
     margin: 0;
-    border-width: 1.5px;
   }
 
-  .chore-week-day.is-due .chore-cal-check {
-    border-color: var(--chore-accent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--chore-accent) 25%, white);
+  .chore-week-cal-day .chore-cal-entry {
+    font-size: 0.68rem;
+    grid-template-columns: 0.7rem 1fr;
+    padding: 0.18rem 0.22rem;
+    margin-bottom: 0.12rem;
   }
 
-  .print-only:not(.chore-print-calendar),
+  .chore-week-cal-day .chore-cal-check {
+    width: 0.62rem;
+    height: 0.62rem;
+    margin-top: 0.1rem;
+  }
+
+  .chore-week-cal-empty {
+    margin: 0.35rem 0 0;
+    font-size: 0.7rem;
+    color: #8a7f70;
+    font-style: italic;
+  }
+
+  .print-only:not(.chore-print-calendar):not(.grocery-print-sheet),
   .chore-print-box {
     display: none !important;
   }
 }
 
-@page chore-week {
+@page grocery-sheet {
   size: portrait;
-  margin: 0.4in;
+  margin: 0.45in;
 }
 
-body.printing-chores-week {
-  page: chore-week;
+body.printing-groceries {
+  page: grocery-sheet;
+}
+
+@media print {
+  body.printing-groceries .grocery-print-sheet,
+  body.printing-groceries .grocery-print-sheet.print-only,
+  body.printing-groceries .grocery-print-sheet[hidden] {
+    display: block !important;
+  }
+
+  .grocery-sheet {
+    font-family: var(--font-body);
+    color: #1c2a24;
+    background:
+      radial-gradient(ellipse 80% 50% at 100% 0%, rgba(196, 92, 38, 0.08), transparent 55%),
+      radial-gradient(ellipse 60% 40% at 0% 100%, rgba(31, 77, 58, 0.08), transparent 50%),
+      linear-gradient(180deg, #fffaf2, #f7f1e6);
+    border: 1.5px solid #d7cfc0;
+    border-radius: 18px;
+    padding: 0.85rem 0.95rem 0.75rem;
+    min-height: 9.2in;
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .grocery-sheet::before {
+    content: "";
+    position: absolute;
+    inset: 0.35rem;
+    border: 1px dashed rgba(196, 92, 38, 0.28);
+    border-radius: 14px;
+    pointer-events: none;
+  }
+
+  .grocery-sheet-header,
+  .grocery-sheet-body,
+  .grocery-sheet-footer {
+    position: relative;
+    z-index: 1;
+  }
+
+  .grocery-sheet-header {
+    text-align: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 2px solid rgba(31, 77, 58, 0.18);
+  }
+
+  .grocery-sheet-kicker {
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #c45c26;
+  }
+
+  .grocery-sheet-title {
+    margin: 0.2rem 0 0.1rem;
+    font-family: var(--font-display);
+    font-size: 2rem;
+    line-height: 1.1;
+    color: #1f4d3a;
+  }
+
+  .grocery-sheet-date {
+    margin: 0;
+    font-size: 0.85rem;
+    color: #5a6b63;
+    font-weight: 600;
+  }
+
+  .grocery-sheet-tagline {
+    margin: 0.35rem 0 0;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 1.05rem;
+    color: #c45c26;
+  }
+
+  .grocery-sheet-body {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .grocery-sheet-aisle-title {
+    margin: 0 0 0.3rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #1f4d3a;
+  }
+
+  .grocery-sheet-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.28rem 0.55rem;
+  }
+
+  .grocery-sheet-item {
+    display: grid;
+    grid-template-columns: 0.85rem 1.1rem 1fr;
+    gap: 0.35rem;
+    align-items: center;
+    padding: 0.28rem 0.35rem;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(28, 42, 36, 0.1);
+  }
+
+  .grocery-sheet-item.is-done .grocery-sheet-name {
+    text-decoration: line-through;
+    opacity: 0.55;
+  }
+
+  .grocery-sheet-check {
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 1.75px solid #c45c26;
+    border-radius: 3px;
+    background: #fff;
+  }
+
+  .grocery-sheet-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+  }
+
+  .grocery-sheet-name {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #1c2a24;
+  }
+
+  .grocery-sheet-footer {
+    display: flex;
+    justify-content: center;
+    gap: 0.35rem;
+    margin-top: 0.85rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid rgba(28, 42, 36, 0.12);
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 0.85rem;
+    color: #5a6b63;
+  }
+
+  .grocery-sheet-footer-dot {
+    color: #c45c26;
+  }
 }

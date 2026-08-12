@@ -97,6 +97,7 @@ async function loadGroceries() {
   const list = document.getElementById("grocery-list");
   if (!list) return;
   const data = await api("/api/groceries");
+  window.__hearthlistGroceries = data.items || [];
   list.innerHTML = "";
   if (!data.items.length) {
     list.appendChild(el("li", "item-meta", "No groceries yet — add your first item."));
@@ -141,6 +142,150 @@ if (groceryForm) {
     }
   });
 }
+
+const GROCERY_TAGLINES = [
+  "Gather the good things.",
+  "Fresh finds, happy cart.",
+  "Shop once. Eat well.",
+  "Bring home the flavor.",
+  "A list worth tasting.",
+];
+
+function pickGroceryTagline() {
+  return GROCERY_TAGLINES[Math.floor(Math.random() * GROCERY_TAGLINES.length)];
+}
+
+function groceryFoodIcon(title) {
+  const t = (title || "").toLowerCase();
+  if (/milk|cheese|yogurt|butter|cream|egg/.test(t)) return "🥛";
+  if (/bread|bagel|bun|tortilla|bakery/.test(t)) return "🍞";
+  if (/apple|berry|berries|banana|fruit|orange|grape|lemon/.test(t)) return "🍓";
+  if (/lettuce|salad|spinach|broccoli|carrot|veg|onion|tomato|potato|garlic/.test(t)) return "🥬";
+  if (/chicken|beef|pork|turkey|fish|salmon|meat|bacon/.test(t)) return "🍗";
+  if (/coffee|tea|juice|soda|water|wine/.test(t)) return "☕";
+  if (/rice|pasta|flour|oil|sauce|spice|cereal|oat|bean|can/.test(t)) return "🫙";
+  if (/ice|frozen|pizza/.test(t)) return "🧊";
+  if (/snack|chip|cookie|chocolate|candy/.test(t)) return "🍪";
+  return "🛒";
+}
+
+function groceryAisle(title) {
+  const t = (title || "").toLowerCase();
+  if (/milk|cheese|yogurt|butter|cream|egg/.test(t)) return "Dairy & eggs";
+  if (/bread|bagel|bun|tortilla/.test(t)) return "Bakery";
+  if (/apple|berry|berries|banana|fruit|orange|grape|lemon|lettuce|salad|spinach|broccoli|carrot|veg|onion|tomato|potato|garlic|herb/.test(t))
+    return "Produce";
+  if (/chicken|beef|pork|turkey|fish|salmon|meat|bacon/.test(t)) return "Meat & fish";
+  if (/ice|frozen|pizza/.test(t)) return "Frozen";
+  if (/coffee|tea|juice|soda|water|wine/.test(t)) return "Drinks";
+  if (/snack|chip|cookie|chocolate|candy/.test(t)) return "Snacks";
+  return "Pantry & more";
+}
+
+const GROCERY_AISLE_ORDER = [
+  "Produce",
+  "Dairy & eggs",
+  "Bakery",
+  "Meat & fish",
+  "Pantry & more",
+  "Frozen",
+  "Drinks",
+  "Snacks",
+];
+
+function buildPrintGroceryList(items) {
+  const root = document.getElementById("grocery-print-sheet");
+  if (!root) return;
+  const openItems = items.filter((i) => !i.done);
+  const source = openItems.length ? openItems : items;
+  const household = householdNameForPrint();
+  const tagline = pickGroceryTagline();
+  const today = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  root.innerHTML = "";
+  root.hidden = false;
+
+  const sheet = el("div", "grocery-sheet");
+  const header = el("header", "grocery-sheet-header");
+  header.appendChild(el("p", "grocery-sheet-kicker", household));
+  header.appendChild(el("h2", "grocery-sheet-title", "Market list"));
+  header.appendChild(el("p", "grocery-sheet-date", today));
+  header.appendChild(el("p", "grocery-sheet-tagline", tagline));
+  sheet.appendChild(header);
+
+  const byAisle = {};
+  for (const item of source) {
+    const aisle = groceryAisle(item.title);
+    byAisle[aisle] = byAisle[aisle] || [];
+    byAisle[aisle].push(item);
+  }
+  const aisles = GROCERY_AISLE_ORDER.filter((name) => byAisle[name]?.length);
+  for (const name of Object.keys(byAisle)) {
+    if (!aisles.includes(name)) aisles.push(name);
+  }
+
+  const body = el("div", "grocery-sheet-body");
+  for (const aisle of aisles) {
+    const section = el("section", "grocery-sheet-aisle");
+    section.appendChild(el("h3", "grocery-sheet-aisle-title", aisle));
+    const grid = el("div", "grocery-sheet-grid");
+    for (const item of byAisle[aisle]) {
+      const row = el("div", item.done ? "grocery-sheet-item is-done" : "grocery-sheet-item");
+      row.appendChild(el("span", "grocery-sheet-check", ""));
+      row.appendChild(el("span", "grocery-sheet-icon", groceryFoodIcon(item.title)));
+      row.appendChild(el("span", "grocery-sheet-name", item.title));
+      grid.appendChild(row);
+    }
+    section.appendChild(grid);
+    body.appendChild(section);
+  }
+  sheet.appendChild(body);
+
+  const footer = el("footer", "grocery-sheet-footer");
+  footer.appendChild(el("span", "", "Happy shopping"));
+  footer.appendChild(el("span", "grocery-sheet-footer-dot", "·"));
+  footer.appendChild(el("span", "", household));
+  sheet.appendChild(footer);
+  root.appendChild(sheet);
+}
+
+function printGroceryList() {
+  const items = window.__hearthlistGroceries || [];
+  if (!items.length) {
+    alert("Add a few grocery items before printing.");
+    return;
+  }
+  buildPrintGroceryList(items);
+  document.body.classList.add("printing-groceries");
+  const title = document.title;
+  document.title = `${householdNameForPrint()} market list`;
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.body.classList.remove("printing-groceries");
+    document.title = title;
+    const sheet = document.getElementById("grocery-print-sheet");
+    if (sheet) {
+      sheet.hidden = true;
+      sheet.innerHTML = "";
+    }
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.print();
+      setTimeout(cleanup, 60000);
+    });
+  });
+}
+
+document.getElementById("print-groceries")?.addEventListener("click", printGroceryList);
 
 function weekdayLabel(iso) {
   const [y, m, d] = iso.split("-").map(Number);
@@ -782,20 +927,14 @@ function buildPrintWeekChart(items) {
 
   const header = el("header", "chore-cal-header");
   header.appendChild(el("p", "chore-cal-kicker", household));
-  header.appendChild(el("h2", "chore-cal-title", "This week’s chore chart"));
-  header.appendChild(el("p", "chore-cal-sub", `${formatWeekRange(weekDays)} · check off each day`));
+  header.appendChild(el("h2", "chore-cal-title", "This week’s chore calendar"));
+  header.appendChild(el("p", "chore-cal-sub", `${formatWeekRange(weekDays)} · check off each day · hang on the fridge`));
   header.appendChild(el("p", "chore-cal-quote", quote));
   root.appendChild(header);
 
-  const byPerson = {};
-  for (const item of items) {
-    const who = (item.assignee || "").trim() || "Unassigned";
-    byPerson[who] = byPerson[who] || [];
-    byPerson[who].push(item);
-  }
-  const people = Object.keys(byPerson).sort((a, b) =>
-    a.localeCompare(b, undefined, { sensitivity: "base" })
-  );
+  const people = [
+    ...new Set(items.map((i) => (i.assignee || "").trim() || "Unassigned")),
+  ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
 
   const legend = el("div", "chore-cal-legend");
   for (const name of people) {
@@ -806,40 +945,35 @@ function buildPrintWeekChart(items) {
   }
   root.appendChild(legend);
 
-  const chart = el("div", "chore-week-chart");
-  for (const name of people) {
-    const section = el("section", `chore-week-person chore-color-${assigneeColorIndex(name)}`);
-    const head = el("div", "chore-week-person-head");
-    head.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
-    head.appendChild(el("h3", "chore-week-person-name", name));
-    section.appendChild(head);
+  const grid = el("div", "chore-week-cal-grid");
+  const dowLabels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  weekDays.forEach((day, idx) => {
+    const cell = el("div", "chore-week-cal-day");
+    const top = el("div", "chore-week-cal-top");
+    top.appendChild(el("div", "chore-week-cal-dow", dowLabels[idx]));
+    top.appendChild(el("div", "chore-cal-daynum", String(day.getDate())));
+    cell.appendChild(top);
 
-    const table = el("div", "chore-week-table");
-    const headRow = el("div", "chore-week-row chore-week-row-head");
-    headRow.appendChild(el("div", "chore-week-task-head", "Chore"));
-    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((label) => {
-      headRow.appendChild(el("div", "chore-week-day-head", label));
-    });
-    table.appendChild(headRow);
-
-    for (const item of byPerson[name]) {
-      const row = el("div", "chore-week-row");
-      const task = el("div", "chore-week-task");
-      task.appendChild(el("span", "chore-task-icon", choreTaskIcon(item.title)));
-      task.appendChild(document.createTextNode(` ${item.title}`));
-      row.appendChild(task);
-      weekDays.forEach((day) => {
-        const dueToday = choresForCalendarDay([item], day).length > 0;
-        const cell = el("div", dueToday ? "chore-week-day is-due" : "chore-week-day");
-        cell.appendChild(el("span", "chore-cal-check", ""));
-        row.appendChild(cell);
-      });
-      table.appendChild(row);
+    const dayItems = choresForCalendarDay(items, day);
+    for (const item of dayItems) {
+      const who = (item.assignee || "").trim() || "Unassigned";
+      const row = el("div", `chore-cal-entry chore-color-${assigneeColorIndex(who)}`);
+      row.appendChild(el("span", "chore-cal-check", ""));
+      const text = el("span", "chore-cal-entry-text");
+      text.appendChild(el("span", "chore-task-icon", choreTaskIcon(item.title)));
+      text.appendChild(document.createTextNode(` ${item.title}`));
+      if (who !== "Unassigned") {
+        text.appendChild(document.createTextNode(` · ${who}`));
+      }
+      row.appendChild(text);
+      cell.appendChild(row);
     }
-    section.appendChild(table);
-    chart.appendChild(section);
-  }
-  root.appendChild(chart);
+    if (!dayItems.length) {
+      cell.appendChild(el("p", "chore-week-cal-empty", "No chores"));
+    }
+    grid.appendChild(cell);
+  });
+  root.appendChild(grid);
 
   const footer = el("footer", "chore-cal-footer");
   footer.appendChild(el("span", "chore-cal-footer-home", household));
@@ -905,7 +1039,7 @@ function printChoreChart() {
 function printChoreWeekChart() {
   runChorePrint({
     buildFn: buildPrintWeekChart,
-    titleText: `${householdNameForPrint()} weekly chore chart`,
+    titleText: `${householdNameForPrint()} weekly chore calendar`,
     weekMode: true,
   });
 }

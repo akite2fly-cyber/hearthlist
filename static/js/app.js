@@ -550,6 +550,16 @@ async function loadMeals() {
     byDate[slot.date][slot.meal_type] = slot;
   }
 
+  const closeOtherMealCells = (keep) => {
+    grid.querySelectorAll(".meal-cell.is-open").forEach((openCell) => {
+      if (openCell !== keep) {
+        openCell.classList.remove("is-open");
+        const openInput = openCell.querySelector(".meal-cell-input");
+        if (openInput === document.activeElement) openInput.blur();
+      }
+    });
+  };
+
   for (const day of data.week) {
     grid.appendChild(el("div", "meal-day", weekdayLabel(day)));
     for (const type of ["breakfast", "lunch", "dinner"]) {
@@ -564,6 +574,17 @@ async function loadMeals() {
       byDate[day][type] = slot;
 
       const cell = el("div", "meal-cell");
+      const summary = el("button", "meal-cell-summary", "");
+      summary.type = "button";
+      summary.setAttribute(
+        "aria-label",
+        `Open ${weekdayLabel(day)} ${MEAL_TYPE_LABELS[type] || type}`
+      );
+      const summaryTitle = el("span", "meal-cell-summary-title", slot.title || "Add meal…");
+      if (!slot.title) summaryTitle.classList.add("is-empty");
+      summary.appendChild(summaryTitle);
+
+      const plan = el("div", "meal-cell-plan");
       const input = document.createElement("input");
       input.type = "text";
       input.className = "meal-cell-input";
@@ -576,17 +597,27 @@ async function loadMeals() {
       );
 
       let lastSaved = slot.title || "";
+      const syncSummaryTitle = () => {
+        const next = input.value.trim();
+        summaryTitle.textContent = next || "Add meal…";
+        summaryTitle.classList.toggle("is-empty", !next);
+      };
       const persistTitle = async () => {
         const next = input.value.trim();
-        if (next === lastSaved) return;
+        if (next === lastSaved) {
+          syncSummaryTitle();
+          return;
+        }
         input.classList.add("is-saving");
         try {
           await saveMealSlot(slot, { title: next });
           lastSaved = next;
           input.value = next;
+          syncSummaryTitle();
           refreshMealCellCues(cell, slot);
         } catch (err) {
           input.value = lastSaved;
+          syncSummaryTitle();
           alert(err.message || "Could not save meal.");
         } finally {
           input.classList.remove("is-saving");
@@ -600,26 +631,52 @@ async function loadMeals() {
         }
         if (e.key === "Escape") {
           input.value = lastSaved;
+          syncSummaryTitle();
+          cell.classList.remove("is-open");
           input.blur();
         }
       });
       input.addEventListener("blur", () => {
         persistTitle();
       });
+      input.addEventListener("input", syncSummaryTitle);
 
       const actions = el("div", "meal-cell-actions");
-      const details = el("button", "meal-cell-details", "Recipe");
+      const details = el("button", "meal-cell-details", "Recipe links");
       details.type = "button";
-      details.title = "Edit recipe link and ingredients";
+      details.title = "Add a recipe webpage link and shopping ingredients";
       details.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
         openMealEditor(slot);
       });
+      const done = el("button", "meal-cell-done", "Done");
+      done.type = "button";
+      done.title = "Close this meal box";
+      done.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await persistTitle();
+        cell.classList.remove("is-open");
+      });
       actions.appendChild(details);
+      actions.appendChild(done);
 
-      cell.appendChild(input);
-      cell.appendChild(actions);
+      plan.appendChild(input);
+      plan.appendChild(actions);
+
+      summary.addEventListener("click", (e) => {
+        e.preventDefault();
+        const opening = !cell.classList.contains("is-open");
+        closeOtherMealCells(cell);
+        cell.classList.toggle("is-open", opening);
+        if (opening) {
+          requestAnimationFrame(() => input.focus());
+        }
+      });
+
+      cell.appendChild(summary);
+      cell.appendChild(plan);
       refreshMealCellCues(cell, slot);
       grid.appendChild(cell);
     }
@@ -632,11 +689,10 @@ function refreshMealCellCues(cell, slot) {
   if (slot.recipe_url) cues.appendChild(el("span", "meal-cue", "Link"));
   const ingCount = Array.isArray(slot.ingredients) ? slot.ingredients.length : 0;
   if (ingCount) cues.appendChild(el("span", "meal-cue", `${ingCount} items`));
-  if (cues.childNodes.length) {
-    const actions = cell.querySelector(".meal-cell-actions");
-    if (actions) cell.insertBefore(cues, actions);
-    else cell.appendChild(cues);
-  }
+  if (!cues.childNodes.length) return;
+  const summary = cell.querySelector(".meal-cell-summary");
+  if (summary) summary.appendChild(cues);
+  else cell.appendChild(cues);
 }
 
 document.getElementById("meal-editor-cancel")?.addEventListener("click", closeMealEditor);

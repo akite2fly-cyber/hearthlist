@@ -1297,14 +1297,69 @@ body.page-app {
 .meal-cell {
   border: 1px solid var(--line);
   border-radius: 12px;
-  min-height: 72px;
-  padding: 0.4rem 0.45rem 0.35rem;
+  min-height: 64px;
+  padding: 0;
   background: rgba(255, 255, 255, 0.75);
   font: inherit;
   text-align: left;
   display: flex;
   flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.meal-cell.is-open {
+  border-color: rgba(31, 77, 58, 0.35);
+  box-shadow: 0 0 0 2px rgba(31, 77, 58, 0.08);
+}
+
+.meal-cell-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 0.3rem;
+  width: 100%;
+  min-height: 64px;
+  padding: 0.5rem 0.55rem;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.meal-cell-summary:hover {
+  background: rgba(31, 77, 58, 0.05);
+}
+
+.meal-cell.is-open .meal-cell-summary {
+  display: none;
+}
+
+.meal-cell-summary-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.25;
+}
+
+.meal-cell-summary-title.is-empty {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.meal-cell-plan {
+  display: none;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.45rem 0.5rem 0.4rem;
+  flex: 1;
+}
+
+.meal-cell.is-open .meal-cell-plan {
+  display: flex;
 }
 
 .meal-cell-input {
@@ -1337,12 +1392,13 @@ body.page-app {
   margin-top: auto;
   display: flex;
   justify-content: flex-end;
+  gap: 0.3rem;
+  flex-wrap: wrap;
 }
 
-.meal-cell-details {
+.meal-cell-details,
+.meal-cell-done {
   border: 0;
-  background: rgba(31, 77, 58, 0.1);
-  color: var(--accent);
   border-radius: 999px;
   padding: 0.15rem 0.5rem;
   font: inherit;
@@ -1351,8 +1407,23 @@ body.page-app {
   cursor: pointer;
 }
 
+.meal-cell-details {
+  background: rgba(31, 77, 58, 0.1);
+  color: var(--accent);
+}
+
 .meal-cell-details:hover {
   background: rgba(31, 77, 58, 0.16);
+}
+
+.meal-cell-done {
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.meal-cell-done:hover {
+  color: var(--ink);
+  background: rgba(28, 42, 36, 0.06);
 }
 
 .meal-cell strong {
@@ -1364,7 +1435,6 @@ body.page-app {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;
-  margin-top: 0.25rem;
 }
 
 .meal-cue {

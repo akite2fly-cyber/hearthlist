@@ -619,6 +619,25 @@ function householdNameForPrint() {
   );
 }
 
+function currentWeekDays() {
+  const today = new Date();
+  const mondayOffset = (today.getDay() + 6) % 7; // Mon=0
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+    return d;
+  });
+}
+
+function formatWeekRange(days) {
+  if (!days.length) return "";
+  const start = days[0];
+  const end = days[6];
+  const opts = { month: "short", day: "numeric" };
+  const year = end.getFullYear();
+  return `${start.toLocaleDateString(undefined, opts)} – ${end.toLocaleDateString(undefined, opts)}, ${year}`;
+}
+
 function monthMatrix(year, monthIndex) {
   // Monday-first calendar grid
   const first = new Date(year, monthIndex, 1);
@@ -680,6 +699,8 @@ function buildPrintCalendar(items) {
 
   root.innerHTML = "";
   root.hidden = false;
+  root.classList.add("chore-print-month");
+  root.classList.remove("chore-print-week");
 
   const quote = pickChoreMotivator();
   const household = householdNameForPrint();
@@ -747,32 +768,150 @@ function buildPrintCalendar(items) {
   root.appendChild(footer);
 }
 
-function printChoreChart() {
+function buildPrintWeekChart(items) {
+  const root = document.getElementById("chore-print-calendar");
+  if (!root) return;
+  const weekDays = currentWeekDays();
+  const quote = pickChoreMotivator();
+  const household = householdNameForPrint();
+
+  root.innerHTML = "";
+  root.hidden = false;
+  root.classList.add("chore-print-week");
+  root.classList.remove("chore-print-month");
+
+  const header = el("header", "chore-cal-header");
+  header.appendChild(el("p", "chore-cal-kicker", household));
+  header.appendChild(el("h2", "chore-cal-title", "This week’s chore chart"));
+  header.appendChild(el("p", "chore-cal-sub", `${formatWeekRange(weekDays)} · check off each day`));
+  header.appendChild(el("p", "chore-cal-quote", quote));
+  root.appendChild(header);
+
+  const byPerson = {};
+  for (const item of items) {
+    const who = (item.assignee || "").trim() || "Unassigned";
+    byPerson[who] = byPerson[who] || [];
+    byPerson[who].push(item);
+  }
+  const people = Object.keys(byPerson).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" })
+  );
+
+  const legend = el("div", "chore-cal-legend");
+  for (const name of people) {
+    const chip = el("span", `chore-cal-chip chore-color-${assigneeColorIndex(name)}`);
+    chip.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
+    chip.appendChild(document.createTextNode(` ${name}`));
+    legend.appendChild(chip);
+  }
+  root.appendChild(legend);
+
+  const chart = el("div", "chore-week-chart");
+  for (const name of people) {
+    const section = el("section", `chore-week-person chore-color-${assigneeColorIndex(name)}`);
+    const head = el("div", "chore-week-person-head");
+    head.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
+    head.appendChild(el("h3", "chore-week-person-name", name));
+    section.appendChild(head);
+
+    const table = el("div", "chore-week-table");
+    const headRow = el("div", "chore-week-row chore-week-row-head");
+    headRow.appendChild(el("div", "chore-week-task-head", "Chore"));
+    ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((label) => {
+      headRow.appendChild(el("div", "chore-week-day-head", label));
+    });
+    table.appendChild(headRow);
+
+    for (const item of byPerson[name]) {
+      const row = el("div", "chore-week-row");
+      const task = el("div", "chore-week-task");
+      task.appendChild(el("span", "chore-task-icon", choreTaskIcon(item.title)));
+      task.appendChild(document.createTextNode(` ${item.title}`));
+      row.appendChild(task);
+      weekDays.forEach((day) => {
+        const dueToday = choresForCalendarDay([item], day).length > 0;
+        const cell = el("div", dueToday ? "chore-week-day is-due" : "chore-week-day");
+        cell.appendChild(el("span", "chore-cal-check", ""));
+        row.appendChild(cell);
+      });
+      table.appendChild(row);
+    }
+    section.appendChild(table);
+    chart.appendChild(section);
+  }
+  root.appendChild(chart);
+
+  const footer = el("footer", "chore-cal-footer");
+  footer.appendChild(el("span", "chore-cal-footer-home", household));
+  footer.appendChild(el("span", "chore-cal-footer-sep", " · "));
+  footer.appendChild(el("span", "chore-cal-footer-quote", quote));
+  root.appendChild(footer);
+}
+
+function runChorePrint({ buildFn, titleText, weekMode }) {
   const items = window.__hearthlistChores || [];
   if (!items.length) {
     alert("Add a few chores (with names in Who?) before printing.");
     return;
   }
-  buildPrintCalendar(items);
+  const root = document.getElementById("chore-print-calendar");
+  if (root) {
+    root.classList.toggle("chore-print-week", !!weekMode);
+    root.classList.toggle("chore-print-month", !weekMode);
+  }
+  buildFn(items);
   document.body.classList.add("printing-chores");
+  document.body.classList.toggle("printing-chores-week", !!weekMode);
+  document.body.classList.toggle("printing-chores-month", !weekMode);
   const title = document.title;
-  document.title = `${householdNameForPrint()} chore calendar`;
+  document.title = titleText;
+  let cleaned = false;
   const cleanup = () => {
-    document.body.classList.remove("printing-chores");
+    if (cleaned) return;
+    cleaned = true;
+    document.body.classList.remove(
+      "printing-chores",
+      "printing-chores-week",
+      "printing-chores-month"
+    );
     document.title = title;
     const cal = document.getElementById("chore-print-calendar");
     if (cal) {
       cal.hidden = true;
       cal.innerHTML = "";
+      cal.classList.remove("chore-print-week", "chore-print-month");
     }
     window.removeEventListener("afterprint", cleanup);
   };
   window.addEventListener("afterprint", cleanup);
-  window.print();
-  setTimeout(cleanup, 1500);
+  // Wait a frame so the print layout paints before the dialog opens.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.print();
+      // Long fallback only — short timeouts cleared the chart mid-dialog before.
+      setTimeout(cleanup, 60000);
+    });
+  });
+}
+
+function printChoreChart() {
+  runChorePrint({
+    buildFn: buildPrintCalendar,
+    titleText: `${householdNameForPrint()} chore calendar`,
+    weekMode: false,
+  });
+}
+
+function printChoreWeekChart() {
+  runChorePrint({
+    buildFn: buildPrintWeekChart,
+    titleText: `${householdNameForPrint()} weekly chore chart`,
+    weekMode: true,
+  });
 }
 
 document.getElementById("print-chores")?.addEventListener("click", printChoreChart);
+document.getElementById("print-chores-week")?.addEventListener("click", printChoreWeekChart);
 
 const choreRecurrence = document.getElementById("chore-recurrence");
 const choreWeekday = document.getElementById("chore-weekday");

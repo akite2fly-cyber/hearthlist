@@ -221,12 +221,23 @@ function buildPrintGroceryList(items) {
   root.hidden = false;
 
   const sheet = el("div", "grocery-sheet");
-  const header = el("header", "grocery-sheet-header");
-  header.appendChild(el("p", "grocery-sheet-kicker", household));
-  header.appendChild(el("h2", "grocery-sheet-title", "Market list"));
-  header.appendChild(el("p", "grocery-sheet-date", today));
-  header.appendChild(el("p", "grocery-sheet-tagline", tagline));
-  sheet.appendChild(header);
+
+  const layout = el("div", "grocery-sheet-layout");
+
+  const aside = el("aside", "grocery-sheet-aside");
+  aside.appendChild(el("p", "grocery-sheet-brand", "Hearthlist"));
+  aside.appendChild(el("p", "grocery-sheet-kicker", household));
+  aside.appendChild(el("h2", "grocery-sheet-title", "Market list"));
+  aside.appendChild(el("p", "grocery-sheet-tagline", tagline));
+  aside.appendChild(el("p", "grocery-sheet-date", today));
+  const stats = el("div", "grocery-sheet-stats");
+  stats.appendChild(el("span", "grocery-sheet-stat-num", String(source.length)));
+  stats.appendChild(
+    el("span", "grocery-sheet-stat-label", source.length === 1 ? "item to gather" : "items to gather")
+  );
+  aside.appendChild(stats);
+  aside.appendChild(el("p", "grocery-sheet-aside-note", "Check things off as you go."));
+  layout.appendChild(aside);
 
   const byAisle = {};
   for (const item of source) {
@@ -239,10 +250,18 @@ function buildPrintGroceryList(items) {
     if (!aisles.includes(name)) aisles.push(name);
   }
 
+  const main = el("div", "grocery-sheet-main");
+  main.appendChild(el("p", "grocery-sheet-main-label", "Your list"));
   const body = el("div", "grocery-sheet-body");
   for (const aisle of aisles) {
     const section = el("section", "grocery-sheet-aisle");
-    section.appendChild(el("h3", "grocery-sheet-aisle-title", aisle));
+    const aisleHead = el("div", "grocery-sheet-aisle-head");
+    aisleHead.appendChild(el("span", "grocery-sheet-aisle-mark", ""));
+    aisleHead.appendChild(el("h3", "grocery-sheet-aisle-title", aisle));
+    aisleHead.appendChild(
+      el("span", "grocery-sheet-aisle-count", String(byAisle[aisle].length))
+    );
+    section.appendChild(aisleHead);
     const grid = el("div", "grocery-sheet-grid");
     for (const item of byAisle[aisle]) {
       const row = el("div", item.done ? "grocery-sheet-item is-done" : "grocery-sheet-item");
@@ -254,12 +273,16 @@ function buildPrintGroceryList(items) {
     section.appendChild(grid);
     body.appendChild(section);
   }
-  sheet.appendChild(body);
+  main.appendChild(body);
+  layout.appendChild(main);
+  sheet.appendChild(layout);
 
   const footer = el("footer", "grocery-sheet-footer");
   footer.appendChild(el("span", "", "Happy shopping"));
   footer.appendChild(el("span", "grocery-sheet-footer-dot", "·"));
   footer.appendChild(el("span", "", household));
+  footer.appendChild(el("span", "grocery-sheet-footer-dot", "·"));
+  footer.appendChild(el("span", "", "Bring home the good stuff"));
   sheet.appendChild(footer);
   root.appendChild(sheet);
 }

@@ -2009,80 +2009,171 @@ body.printing-groceries {
     font-family: var(--font-body);
     color: #1c2a24;
     background:
-      radial-gradient(ellipse 80% 50% at 100% 0%, rgba(196, 92, 38, 0.08), transparent 55%),
-      radial-gradient(ellipse 60% 40% at 0% 100%, rgba(31, 77, 58, 0.08), transparent 50%),
-      linear-gradient(180deg, #fffaf2, #f7f1e6);
-    border: 1.5px solid #d7cfc0;
-    border-radius: 18px;
-    padding: 0.85rem 0.95rem 0.75rem;
-    min-height: 9.2in;
+      radial-gradient(ellipse 70% 45% at 0% 0%, rgba(196, 92, 38, 0.1), transparent 55%),
+      radial-gradient(ellipse 55% 40% at 100% 100%, rgba(31, 77, 58, 0.1), transparent 50%),
+      linear-gradient(180deg, #fffaf2, #f4eee3);
+    border: 1.75px solid #d2c7b4;
+    border-radius: 20px;
+    padding: 0.7rem;
+    min-height: 9.4in;
     box-sizing: border-box;
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   .grocery-sheet::before {
     content: "";
     position: absolute;
-    inset: 0.35rem;
-    border: 1px dashed rgba(196, 92, 38, 0.28);
-    border-radius: 14px;
+    inset: 0.28rem;
+    border: 1px dashed rgba(196, 92, 38, 0.3);
+    border-radius: 16px;
     pointer-events: none;
   }
 
-  .grocery-sheet-header,
-  .grocery-sheet-body,
+  .grocery-sheet-layout,
   .grocery-sheet-footer {
     position: relative;
     z-index: 1;
   }
 
-  .grocery-sheet-header {
-    text-align: center;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.55rem;
-    border-bottom: 2px solid rgba(31, 77, 58, 0.18);
+  .grocery-sheet-layout {
+    display: grid;
+    grid-template-columns: 2.35in 1fr;
+    gap: 0.7rem;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .grocery-sheet-aside {
+    border-radius: 16px;
+    padding: 0.95rem 0.85rem 1rem;
+    color: #fffaf2;
+    background:
+      radial-gradient(ellipse 90% 70% at 110% -10%, rgba(255, 255, 255, 0.2), transparent 45%),
+      linear-gradient(160deg, #1f4d3a 0%, #2f6a50 52%, #c45c26 125%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+
+  .grocery-sheet-brand {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    opacity: 0.92;
   }
 
   .grocery-sheet-kicker {
+    margin: 0.15rem 0 0;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.82;
+  }
+
+  .grocery-sheet-title {
+    margin: 0.35rem 0 0.15rem;
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    line-height: 1.05;
+  }
+
+  .grocery-sheet-tagline {
     margin: 0;
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 0.98rem;
+    line-height: 1.25;
+    opacity: 0.95;
+  }
+
+  .grocery-sheet-date {
+    margin: 0.45rem 0 0;
+    font-size: 0.78rem;
+    font-weight: 600;
+    opacity: 0.88;
+  }
+
+  .grocery-sheet-stats {
+    margin-top: auto;
+    padding-top: 0.85rem;
+    display: grid;
+    gap: 0.1rem;
+  }
+
+  .grocery-sheet-stat-num {
+    font-family: var(--font-display);
+    font-size: 2.2rem;
+    line-height: 1;
+    font-weight: 700;
+  }
+
+  .grocery-sheet-stat-label {
     font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.85;
+  }
+
+  .grocery-sheet-aside-note {
+    margin: 0.55rem 0 0;
+    font-size: 0.75rem;
+    opacity: 0.8;
+  }
+
+  .grocery-sheet-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .grocery-sheet-main-label {
+    margin: 0.1rem 0 0;
+    font-size: 0.7rem;
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: #c45c26;
   }
 
-  .grocery-sheet-title {
-    margin: 0.2rem 0 0.1rem;
-    font-family: var(--font-display);
-    font-size: 2rem;
-    line-height: 1.1;
-    color: #1f4d3a;
-  }
-
-  .grocery-sheet-date {
-    margin: 0;
-    font-size: 0.85rem;
-    color: #5a6b63;
-    font-weight: 600;
-  }
-
-  .grocery-sheet-tagline {
-    margin: 0.35rem 0 0;
-    font-family: var(--font-display);
-    font-style: italic;
-    font-size: 1.05rem;
-    color: #c45c26;
-  }
-
   .grocery-sheet-body {
     display: grid;
-    gap: 0.65rem;
+    gap: 0.55rem;
+  }
+
+  .grocery-sheet-aisle {
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(28, 42, 36, 0.1);
+    border-radius: 14px;
+    padding: 0.45rem 0.5rem 0.55rem;
+  }
+
+  .grocery-sheet-aisle-head {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .grocery-sheet-aisle-mark {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 999px;
+    background: #c45c26;
+    box-shadow: 0 0 0 3px rgba(196, 92, 38, 0.15);
   }
 
   .grocery-sheet-aisle-title {
-    margin: 0 0 0.3rem;
+    margin: 0;
+    flex: 1;
     font-size: 0.72rem;
     font-weight: 800;
     letter-spacing: 0.06em;
@@ -2090,10 +2181,22 @@ body.printing-groceries {
     color: #1f4d3a;
   }
 
+  .grocery-sheet-aisle-count {
+    min-width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    display: inline-grid;
+    place-items: center;
+    background: rgba(31, 77, 58, 0.12);
+    color: #1f4d3a;
+    font-size: 0.68rem;
+    font-weight: 800;
+  }
+
   .grocery-sheet-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.28rem 0.55rem;
+    gap: 0.28rem 0.45rem;
   }
 
   .grocery-sheet-item {
@@ -2101,10 +2204,11 @@ body.printing-groceries {
     grid-template-columns: 0.85rem 1.1rem 1fr;
     gap: 0.35rem;
     align-items: center;
-    padding: 0.28rem 0.35rem;
+    padding: 0.32rem 0.4rem;
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.72);
+    background: rgba(255, 252, 247, 0.95);
     border: 1px solid rgba(28, 42, 36, 0.1);
+    box-shadow: 0 4px 10px rgba(28, 42, 36, 0.04);
   }
 
   .grocery-sheet-item.is-done .grocery-sheet-name {
@@ -2113,34 +2217,35 @@ body.printing-groceries {
   }
 
   .grocery-sheet-check {
-    width: 0.72rem;
-    height: 0.72rem;
+    width: 0.75rem;
+    height: 0.75rem;
     border: 1.75px solid #c45c26;
     border-radius: 3px;
     background: #fff;
   }
 
   .grocery-sheet-icon {
-    font-size: 0.95rem;
+    font-size: 0.98rem;
     line-height: 1;
   }
 
   .grocery-sheet-name {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     font-weight: 700;
     color: #1c2a24;
   }
 
   .grocery-sheet-footer {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 0.35rem;
-    margin-top: 0.85rem;
+    margin-top: 0.65rem;
     padding-top: 0.45rem;
     border-top: 1px solid rgba(28, 42, 36, 0.12);
     font-family: var(--font-display);
     font-style: italic;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     color: #5a6b63;
   }
 

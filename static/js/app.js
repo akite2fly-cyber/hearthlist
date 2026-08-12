@@ -534,10 +534,23 @@ async function saveMealSlot(slot, patch = {}) {
   slot.ingredients = Array.isArray(ingredients) ? ingredients : [];
 }
 
+function weekdayParts(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return {
+    short: date.toLocaleDateString(undefined, { weekday: "short" }),
+    long: date.toLocaleDateString(undefined, { weekday: "long" }),
+    dayNum: String(date.getDate()),
+  };
+}
+
 async function loadMeals() {
   const grid = document.getElementById("meals-grid");
   if (!grid) return;
-  const openDay = grid.querySelector(".meal-day-box.is-open")?.dataset?.date || "";
+  const openDay =
+    grid.querySelector(".meal-day-btn.is-open")?.dataset?.date ||
+    grid.querySelector(".meal-day-panel.is-open")?.dataset?.date ||
+    "";
   const data = await api("/api/meals");
   grid.className = "meals-week";
   grid.innerHTML = "";
@@ -548,34 +561,59 @@ async function loadMeals() {
     byDate[slot.date][slot.meal_type] = slot;
   }
 
-  const closeOtherDays = (keep) => {
-    grid.querySelectorAll(".meal-day-box.is-open").forEach((box) => {
-      if (box !== keep) {
-        box.classList.remove("is-open");
-        box.querySelector(".meal-day-toggle")?.setAttribute("aria-expanded", "false");
-      }
+  const strip = el("div", "meals-week-strip");
+  const journal = el("div", "meals-week-journal");
+  grid.appendChild(strip);
+  grid.appendChild(journal);
+
+  const setOpenDay = (date) => {
+    strip.querySelectorAll(".meal-day-btn").forEach((btn) => {
+      const on = btn.dataset.date === date;
+      btn.classList.toggle("is-open", on);
+      btn.setAttribute("aria-expanded", on ? "true" : "false");
     });
+    journal.querySelectorAll(".meal-day-panel").forEach((panel) => {
+      const on = panel.dataset.date === date;
+      panel.classList.toggle("is-open", on);
+      panel.hidden = !on;
+    });
+    if (date) {
+      requestAnimationFrame(() => {
+        journal
+          .querySelector(`.meal-day-panel[data-date="${date}"] .meal-cell-input`)
+          ?.focus();
+      });
+    }
   };
 
-  for (const day of data.week) {
-    const dayBox = el("section", "meal-day-box");
-    dayBox.dataset.date = day;
-
-    const toggle = el("button", "meal-day-toggle", "");
-    toggle.type = "button";
-    toggle.setAttribute("aria-expanded", "false");
-    const dayName = weekdayLabel(day);
-    toggle.setAttribute("aria-label", `Open ${dayName} meals`);
-
-    const toggleMain = el("div", "meal-day-toggle-main");
-    toggleMain.appendChild(el("span", "meal-day-name", dayName));
-    const preview = el("span", "meal-day-preview", "");
-    toggleMain.appendChild(preview);
-    toggle.appendChild(toggleMain);
-    toggle.appendChild(el("span", "meal-day-chevron", "▸"));
-
-    const slotsWrap = el("div", "meal-day-slots");
+  data.week.forEach((day, index) => {
+    const tone = index % 7;
+    const parts = weekdayParts(day);
     const planned = [];
+
+    const btn = el("button", `meal-day-btn meal-day-tone-${tone}`, "");
+    btn.type = "button";
+    btn.dataset.date = day;
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-label", `Open ${parts.long} meals`);
+    btn.appendChild(el("span", "meal-day-kicker", parts.short));
+    btn.appendChild(el("span", "meal-day-num", parts.dayNum));
+    btn.appendChild(el("span", "meal-day-name", parts.long));
+    const preview = el("span", "meal-day-preview", "");
+    btn.appendChild(preview);
+    const count = el("span", "meal-day-count", "0");
+    btn.appendChild(count);
+
+    const panel = el("section", `meal-day-panel meal-day-tone-${tone}`);
+    panel.dataset.date = day;
+    panel.hidden = true;
+    const panelHead = el("div", "meal-day-panel-head");
+    panelHead.appendChild(el("h3", "meal-day-panel-title", parts.long));
+    panelHead.appendChild(
+      el("p", "meal-day-panel-note", "Breakfast, lunch, and dinner for this day")
+    );
+    panel.appendChild(panelHead);
+    const slotsWrap = el("div", "meal-day-slots");
 
     for (const type of ["breakfast", "lunch", "dinner"]) {
       const slot = byDate[day]?.[type] || {
@@ -598,15 +636,17 @@ async function loadMeals() {
       input.maxLength = 200;
       input.placeholder = "Add meal…";
       input.value = slot.title || "";
-      input.setAttribute("aria-label", `${dayName} ${MEAL_TYPE_LABELS[type] || type}`);
+      input.setAttribute("aria-label", `${parts.long} ${MEAL_TYPE_LABELS[type] || type}`);
 
       let lastSaved = slot.title || "";
       const refreshDayPreview = () => {
         const titles = ["breakfast", "lunch", "dinner"]
           .map((t) => (byDate[day]?.[t]?.title || "").trim())
           .filter(Boolean);
-        preview.textContent = titles.length ? titles.join(" · ") : "No meals yet";
+        preview.textContent = titles.length ? titles.join(" · ") : "Plan meals";
         preview.classList.toggle("is-empty", !titles.length);
+        count.textContent = String(titles.length);
+        count.hidden = titles.length === 0;
       };
       const persistTitle = async () => {
         const next = input.value.trim();
@@ -670,29 +710,22 @@ async function loadMeals() {
       slotsWrap.appendChild(cell);
     }
 
-    preview.textContent = planned.length ? planned.join(" · ") : "No meals yet";
+    preview.textContent = planned.length ? planned.join(" · ") : "Plan meals";
     preview.classList.toggle("is-empty", !planned.length);
+    count.textContent = String(planned.length);
+    count.hidden = planned.length === 0;
 
-    toggle.addEventListener("click", () => {
-      const opening = !dayBox.classList.contains("is-open");
-      closeOtherDays(dayBox);
-      dayBox.classList.toggle("is-open", opening);
-      toggle.setAttribute("aria-expanded", opening ? "true" : "false");
-      if (opening) {
-        requestAnimationFrame(() => {
-          slotsWrap.querySelector(".meal-cell-input")?.focus();
-        });
-      }
+    btn.addEventListener("click", () => {
+      const already = btn.classList.contains("is-open");
+      setOpenDay(already ? "" : day);
     });
 
-    dayBox.appendChild(toggle);
-    dayBox.appendChild(slotsWrap);
-    if (openDay && openDay === day) {
-      dayBox.classList.add("is-open");
-      toggle.setAttribute("aria-expanded", "true");
-    }
-    grid.appendChild(dayBox);
-  }
+    panel.appendChild(slotsWrap);
+    strip.appendChild(btn);
+    journal.appendChild(panel);
+  });
+
+  if (openDay) setOpenDay(openDay);
 }
 
 function refreshMealCellCues(cell, slot) {

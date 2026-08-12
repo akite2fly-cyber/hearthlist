@@ -795,14 +795,28 @@ body.page-app {
 
 .chore-groups {
   display: grid;
-  gap: 1rem;
+  gap: 0.85rem;
 }
 
 .chore-group {
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 0.85rem 0.9rem 0.35rem;
-  background: rgba(255, 255, 255, 0.55);
+  position: relative;
+  border: 0;
+  border-radius: 20px;
+  padding: 0.95rem 1rem 0.55rem;
+  overflow: hidden;
+  box-shadow:
+    0 12px 26px rgba(28, 42, 36, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.chore-group::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  background: var(--chore-accent, var(--accent));
 }
 
 .chore-group-head {
@@ -810,13 +824,15 @@ body.page-app {
   justify-content: space-between;
   align-items: baseline;
   gap: 0.75rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.45rem;
+  padding-left: 0.35rem;
 }
 
 .chore-group-name {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .chore-group-title {
@@ -825,17 +841,42 @@ body.page-app {
   gap: 0.45rem;
 }
 
-.chore-group-icon,
-.chore-task-icon {
-  font-style: normal;
+.chore-color-0 {
+  --chore-tint: linear-gradient(145deg, #dff7ea, #bfead3);
+  --chore-ink: #1f4d3a;
+  --chore-accent: #2f8f63;
+  --chore-soft: rgba(47, 143, 99, 0.14);
 }
-
-.chore-color-0 { --chore-tint: #d9f2e5; --chore-ink: #1f4d3a; --chore-accent: #2f6b4f; }
-.chore-color-1 { --chore-tint: #ffe8d6; --chore-ink: #8a3b12; --chore-accent: #c45c26; }
-.chore-color-2 { --chore-tint: #e3eefc; --chore-ink: #1d3f73; --chore-accent: #3b6ea8; }
-.chore-color-3 { --chore-tint: #f3e6ff; --chore-ink: #5a2d82; --chore-accent: #7a45a8; }
-.chore-color-4 { --chore-tint: #fff3bf; --chore-ink: #6b5200; --chore-accent: #c9a227; }
-.chore-color-5 { --chore-tint: #ffe0e6; --chore-ink: #7a2436; --chore-accent: #c44569; }
+.chore-color-1 {
+  --chore-tint: linear-gradient(145deg, #ffe7d6, #ffd0b0);
+  --chore-ink: #8a3b12;
+  --chore-accent: #d96b45;
+  --chore-soft: rgba(217, 107, 69, 0.14);
+}
+.chore-color-2 {
+  --chore-tint: linear-gradient(145deg, #dff3f8, #bfe4ef);
+  --chore-ink: #1d5a6b;
+  --chore-accent: #3f97ad;
+  --chore-soft: rgba(63, 151, 173, 0.14);
+}
+.chore-color-3 {
+  --chore-tint: linear-gradient(145deg, #fff0c8, #ffe29a);
+  --chore-ink: #6b5200;
+  --chore-accent: #d0a12e;
+  --chore-soft: rgba(208, 161, 46, 0.16);
+}
+.chore-color-4 {
+  --chore-tint: linear-gradient(145deg, #e4eefc, #c8dbf7);
+  --chore-ink: #1d3f73;
+  --chore-accent: #4578c8;
+  --chore-soft: rgba(69, 120, 200, 0.14);
+}
+.chore-color-5 {
+  --chore-tint: linear-gradient(145deg, #ffe0e6, #ffc5d0);
+  --chore-ink: #7a2436;
+  --chore-accent: #c44569;
+  --chore-soft: rgba(196, 69, 105, 0.14);
+}
 
 .chore-group.chore-color-0,
 .chore-group.chore-color-1,
@@ -844,7 +885,6 @@ body.page-app {
 .chore-group.chore-color-4,
 .chore-group.chore-color-5 {
   background: var(--chore-tint);
-  border-color: rgba(28, 42, 36, 0.12);
 }
 
 .chore-group.chore-color-0 .chore-group-name,
@@ -856,6 +896,27 @@ body.page-app {
   color: var(--chore-ink);
 }
 
+.chore-group.chore-color-0 .chore-group-count,
+.chore-group.chore-color-1 .chore-group-count,
+.chore-group.chore-color-2 .chore-group-count,
+.chore-group.chore-color-3 .chore-group-count,
+.chore-group.chore-color-4 .chore-group-count,
+.chore-group.chore-color-5 .chore-group-count {
+  background: var(--chore-soft);
+  color: var(--chore-ink);
+}
+
+.chore-group .chore-group-list li {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(28, 42, 36, 0.08);
+  border-radius: 12px;
+  margin-bottom: 0.35rem;
+}
+
+.chore-group .item-check {
+  color: var(--chore-accent, var(--accent));
+}
+
 .grocery-print-sheet {
   display: none;
 }
@@ -865,9 +926,21 @@ body.page-app {
 }
 
 .chore-group-count {
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 800;
   color: var(--ink-soft);
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(28, 42, 36, 0.06);
+}
+
+#panel-chores .chore-form {
+  padding: 0.85rem;
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(126, 191, 154, 0.16), rgba(240, 160, 122, 0.14));
+  border: 1px solid rgba(28, 42, 36, 0.08);
+  margin-bottom: 1rem;
 }
 
 .chore-print-box,

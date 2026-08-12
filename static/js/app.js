@@ -803,7 +803,6 @@ async function loadChores() {
 
     const head = el("div", "chore-group-head");
     const titleWrap = el("div", "chore-group-title");
-    titleWrap.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
     titleWrap.appendChild(el("h3", "chore-group-name", name));
     head.appendChild(titleWrap);
     head.appendChild(
@@ -826,24 +825,6 @@ function assigneeColorIndex(name) {
   return hash;
 }
 
-function chorePersonIcon(name) {
-  const icons = ["⭐", "🌈", "🍀", "🌞", "🎈", "🧩"];
-  return icons[assigneeColorIndex(name)];
-}
-
-function choreTaskIcon(title) {
-  const t = (title || "").toLowerCase();
-  if (/trash|garbage|recycle|bin/.test(t)) return "🗑️";
-  if (/dish|sink|kitchen/.test(t)) return "🍽️";
-  if (/vacuum|sweep|mop|floor|dust/.test(t)) return "🧹";
-  if (/bed|room/.test(t)) return "🛏️";
-  if (/laundry|wash|clothes/.test(t)) return "👕";
-  if (/dog|cat|pet|feed/.test(t)) return "🐾";
-  if (/lawn|yard|plant|garden/.test(t)) return "🌿";
-  if (/homework|study|read/.test(t)) return "📚";
-  return "✓";
-}
-
 function buildChoreRow(item) {
   const li = el("li", item.done ? "is-done" : "");
   const check = el("button", "item-check no-print", item.done ? "✓" : "○");
@@ -860,10 +841,7 @@ function buildChoreRow(item) {
   printBox.setAttribute("aria-hidden", "true");
 
   const body = el("div");
-  const titleLine = el("div", "item-title");
-  titleLine.appendChild(el("span", "chore-task-icon", choreTaskIcon(item.title)));
-  titleLine.appendChild(document.createTextNode(` ${item.title}`));
-  body.appendChild(titleLine);
+  body.appendChild(el("div", "item-title", item.title));
   const bits = [];
   if (item.due_date) bits.push(`Due ${item.due_date}`);
   if (item.recurrence === "daily") bits.push("Every day");
@@ -1005,8 +983,7 @@ function buildPrintCalendar(items) {
   const legend = el("div", "chore-cal-legend");
   for (const name of people) {
     const chip = el("span", `chore-cal-chip chore-color-${assigneeColorIndex(name)}`);
-    chip.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
-    chip.appendChild(document.createTextNode(` ${name}`));
+    chip.textContent = name;
     legend.appendChild(chip);
   }
   root.appendChild(legend);
@@ -1033,9 +1010,7 @@ function buildPrintCalendar(items) {
         `chore-cal-entry chore-color-${assigneeColorIndex(who)}`
       );
       row.appendChild(el("span", "chore-cal-check", ""));
-      row.appendChild(
-        el("span", "chore-cal-entry-text", `${choreTaskIcon(item.title)} ${item.title}`)
-      );
+      row.appendChild(el("span", "chore-cal-entry-text", item.title));
       cell.appendChild(row);
     }
     if (allDayItems.length > 3) {
@@ -1080,8 +1055,7 @@ function buildPrintWeekChart(items) {
   const legend = el("div", "chore-cal-legend");
   for (const name of people) {
     const chip = el("span", `chore-cal-chip chore-color-${assigneeColorIndex(name)}`);
-    chip.appendChild(el("span", "chore-group-icon", chorePersonIcon(name)));
-    chip.appendChild(document.createTextNode(` ${name}`));
+    chip.textContent = name;
     legend.appendChild(chip);
   }
   root.appendChild(legend);
@@ -1100,13 +1074,8 @@ function buildPrintWeekChart(items) {
       const who = (item.assignee || "").trim() || "Unassigned";
       const row = el("div", `chore-cal-entry chore-color-${assigneeColorIndex(who)}`);
       row.appendChild(el("span", "chore-cal-check", ""));
-      const text = el("span", "chore-cal-entry-text");
-      text.appendChild(el("span", "chore-task-icon", choreTaskIcon(item.title)));
-      text.appendChild(document.createTextNode(` ${item.title}`));
-      if (who !== "Unassigned") {
-        text.appendChild(document.createTextNode(` · ${who}`));
-      }
-      row.appendChild(text);
+      const label = who !== "Unassigned" ? `${item.title} · ${who}` : item.title;
+      row.appendChild(el("span", "chore-cal-entry-text", label));
       cell.appendChild(row);
     }
     if (!dayItems.length) {

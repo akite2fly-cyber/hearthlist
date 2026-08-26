@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import hashlib
 import json
 import os
-import hashlib
+from io import StringIO
 import hmac
 import re
 import secrets
@@ -22,6 +24,7 @@ from urllib.parse import quote
 
 from flask import (
     Flask,
+    Response,
     flash,
     g,
     jsonify,
@@ -85,6 +88,7 @@ def ensure_env() -> dict[str, str]:
         "SMTP_PASSWORD",
         "SMTP_FROM",
         "SMTP_USE_TLS",
+        "HEARTHLIST_ADMIN_EMAILS",
     ):
         raw = os.environ.get(key)
         if raw:
@@ -432,6 +436,17 @@ def init_db() -> None:
             created_at TEXT NOT NULL,
             FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS email_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            to_email TEXT NOT NULL,
+            subject TEXT NOT NULL,
+            body TEXT NOT NULL,
+            sent_by INTEGER,
+            sent_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'sent',
+            FOREIGN KEY(sent_by) REFERENCES users(id)
+        );
         """
     )
     # Migrations for older local/prod DBs
@@ -660,8 +675,8 @@ def smtp_configured() -> bool:
     return bool(host and from_addr and user and password)
 
 
-def send_reset_email(to_email: str, reset_url: str) -> bool:
-    """Send a password-reset email when SMTP env vars are set. Returns True on success."""
+def send_email(to_email: str, subject: str, body: str) -> bool:
+    """Send a plain-text email when SMTP env vars are set."""
     if not smtp_configured():
         return False
     host = (os.environ.get("SMTP_HOST") or "").strip()
@@ -672,14 +687,10 @@ def send_reset_email(to_email: str, reset_url: str) -> bool:
     use_tls = (os.environ.get("SMTP_USE_TLS") or "1").strip().lower() not in ("0", "false", "no")
 
     msg = EmailMessage()
-    msg["Subject"] = "Reset your Hearthlist password"
+    msg["Subject"] = subject
     msg["From"] = from_addr
     msg["To"] = to_email
-    msg.set_content(
-        "Use this link to set a new Hearthlist password (expires in 1 hour):\n\n"
-        f"{reset_url}\n\n"
-        "If you did not request this, you can ignore this email.\n"
-    )
+    msg.set_content(body)
 
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
@@ -691,8 +702,19 @@ def send_reset_email(to_email: str, reset_url: str) -> bool:
             smtp.send_message(msg)
         return True
     except Exception as exc:  # pragma: no cover
-        print(f"Password reset email failed: {type(exc).__name__}: {exc}")
+        print(f"Email send failed ({to_email}): {type(exc).__name__}: {exc}")
         return False
+
+
+def send_reset_email(to_email: str, reset_url: str) -> bool:
+    """Send a password-reset email when SMTP env vars are set. Returns True on success."""
+    return send_email(
+        to_email,
+        "Reset your Hearthlist password",
+        "Use this link to set a new Hearthlist password (expires in 1 hour):\n\n"
+        f"{reset_url}\n\n"
+        "If you did not request this, you can ignore this email.\n",
+    )
 
 
 def deliver_reset_link(to_email: str, reset_url: str) -> bool:
@@ -917,6 +939,20 @@ def verify_lemon_signature(raw_body: bytes, signature: str, secret: str) -> bool
     return hmac.compare_digest(digest, (signature or "").strip())
 
 
+def admin_emails() -> set[str]:
+    raw = (os.environ.get("HEARTHLIST_ADMIN_EMAILS") or "").strip()
+    return {part.strip().lower() for part in raw.split(",") if part.strip()}
+
+
+def user_is_admin(user) -> bool:
+    if not user:
+        return False
+    allowed = admin_emails()
+    if not allowed:
+        return False
+    return (user["email"] or "").strip().lower() in allowed
+
+
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
@@ -942,6 +978,70 @@ def require_household(view):
         return view(*args, household=household, user=user, **kwargs)
 
     return wrapped
+
+
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        user = current_user()
+        if not user:
+            return redirect(url_for("login", next=request.path))
+        if not user_is_admin(user):
+            flash("You don’t have access to that page.", "error")
+            return redirect(url_for("home"))
+        return view(*args, user=user, **kwargs)
+
+    return wrapped
+
+
+def list_users_for_admin():
+    return get_db().execute(
+        """
+        SELECT
+            u.id,
+            u.email,
+            u.name,
+            u.created_at,
+            (
+                SELECT h.name
+                FROM memberships m
+                JOIN households h ON h.id = m.household_id
+                WHERE m.user_id = u.id
+                ORDER BY m.joined_at ASC
+                LIMIT 1
+            ) AS household_name,
+            (
+                SELECT h.plan
+                FROM memberships m
+                JOIN households h ON h.id = m.household_id
+                WHERE m.user_id = u.id
+                ORDER BY m.joined_at ASC
+                LIMIT 1
+            ) AS household_plan,
+            (
+                SELECT h.trial_ends_at
+                FROM memberships m
+                JOIN households h ON h.id = m.household_id
+                WHERE m.user_id = u.id
+                ORDER BY m.joined_at ASC
+                LIMIT 1
+            ) AS trial_ends_at
+        FROM users u
+        ORDER BY u.created_at DESC
+        """
+    ).fetchall()
+
+
+def log_email_message(*, to_email: str, subject: str, body: str, sent_by: int | None, status: str) -> None:
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO email_messages (to_email, subject, body, sent_by, sent_at, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (to_email, subject, body, sent_by, utc_now().isoformat(), status),
+    )
+    db.commit()
 
 
 def pending_invite_code() -> str:
@@ -977,6 +1077,7 @@ def inject_globals():
         "current_user": user,
         "current_household": household,
         "plan": plan_status(household) if household else None,
+        "is_admin": user_is_admin(user),
     }
 
 
@@ -1362,6 +1463,109 @@ def change_password(household, user):
     get_db().commit()
     flash("Password changed.", "ok")
     return redirect(url_for("account"))
+
+
+@app.get("/admin/users")
+@admin_required
+def admin_users(user):
+    users = list_users_for_admin()
+    recent_messages = get_db().execute(
+        """
+        SELECT em.*, u.name AS sender_name
+        FROM email_messages em
+        LEFT JOIN users u ON u.id = em.sent_by
+        ORDER BY em.sent_at DESC
+        LIMIT 40
+        """
+    ).fetchall()
+    return render_template(
+        "admin_users.html",
+        user=user,
+        users=users,
+        recent_messages=recent_messages,
+        smtp_ready=smtp_configured(),
+        user_count=len(users),
+    )
+
+
+@app.get("/admin/users/export.csv")
+@admin_required
+def admin_users_export(user):
+    rows = list_users_for_admin()
+    buf = StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["email", "name", "signed_up", "household", "plan", "trial_ends"])
+    for row in rows:
+        writer.writerow(
+            [
+                row["email"],
+                row["name"],
+                (row["created_at"] or "")[:10],
+                row["household_name"] or "",
+                row["household_plan"] or "",
+                (row["trial_ends_at"] or "")[:10],
+            ]
+        )
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=hearthlist-users.csv"},
+    )
+
+
+@app.post("/admin/users/send")
+@admin_required
+def admin_users_send(user):
+    if not smtp_configured():
+        flash("SMTP isn’t configured — set SMTP_* env vars on the server first.", "error")
+        return redirect(url_for("admin_users"))
+
+    subject = (request.form.get("subject") or "").strip()
+    body = (request.form.get("body") or "").strip()
+    target = (request.form.get("target") or "one").strip()
+    user_id = request.form.get("user_id")
+
+    if not subject or not body:
+        flash("Subject and message are required.", "error")
+        return redirect(url_for("admin_users"))
+
+    if target == "all":
+        recipients = get_db().execute("SELECT id, email, name FROM users ORDER BY email").fetchall()
+    else:
+        if not user_id:
+            flash("Pick a user to email.", "error")
+            return redirect(url_for("admin_users"))
+        row = get_db().execute(
+            "SELECT id, email, name FROM users WHERE id = ?", (user_id,)
+        ).fetchone()
+        if not row:
+            flash("User not found.", "error")
+            return redirect(url_for("admin_users"))
+        recipients = [row]
+
+    sent = 0
+    failed = 0
+    for recipient in recipients:
+        ok = send_email(recipient["email"], subject, body)
+        log_email_message(
+            to_email=recipient["email"],
+            subject=subject,
+            body=body,
+            sent_by=user["id"],
+            status="sent" if ok else "failed",
+        )
+        if ok:
+            sent += 1
+        else:
+            failed += 1
+
+    if sent and not failed:
+        flash(f"Message sent to {sent} user{'s' if sent != 1 else ''}.", "ok")
+    elif sent:
+        flash(f"Sent to {sent}; {failed} failed. Check server logs.", "error")
+    else:
+        flash("Could not send — check SMTP settings and server logs.", "error")
+    return redirect(url_for("admin_users"))
 
 
 @app.get("/join/<code>")

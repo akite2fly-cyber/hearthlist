@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Users — Hearthlist admin{% endblock %}
+{% block body_class %}page-app{% endblock %}
+{% block content %}
+<header class="app-top">
+  <div>
+    <p class="eyebrow">Admin</p>
+    <h1 class="app-title">Users &amp; email</h1>
+    <p class="section-hint">{{ user_count }} signup{{ 's' if user_count != 1 else '' }}</p>
+  </div>
+  <div class="app-top-actions">
+    <a class="nav-link" href="{{ url_for('home') }}">Back to hub</a>
+    <a class="nav-link" href="{{ url_for('admin_users_export') }}">Download CSV</a>
+  </div>
+</header>
+
+{% if not smtp_ready %}
+<p class="flash flash--error" style="position:static;margin:0 0 1rem;border-radius:12px;">
+  SMTP is not configured — you can see emails here, but sending needs SMTP_* env vars on Render.
+</p>
+{% endif %}
+
+<section class="admin-grid">
+  <article class="account-card admin-card--wide">
+    <h2>Send a message</h2>
+    <form method="post" action="{{ url_for('admin_users_send') }}" class="auth-form admin-send-form">
+      <label>Send to
+        <select name="target" id="admin-target">
+          <option value="one">One user</option>
+          <option value="all">All users ({{ user_count }})</option>
+        </select>
+      </label>
+      <label id="admin-user-pick">User
+        <select name="user_id">
+          {% for u in users %}
+          <option value="{{ u.id }}">{{ u.name }} — {{ u.email }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Subject
+        <input type="text" name="subject" required maxlength="200" placeholder="Hearthlist update" />
+      </label>
+      <label>Message
+        <textarea name="body" rows="6" required maxlength="8000" placeholder="Write your message…"></textarea>
+      </label>
+      <button class="btn btn-primary" type="submit" {% if not smtp_ready %}disabled{% endif %}>Send email</button>
+    </form>
+  </article>
+
+  <article class="account-card admin-card--wide">
+    <h2>All users</h2>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Signed up</th>
+            <th>Household</th>
+            <th>Plan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+          <tr>
+            <td>{{ u.name }}</td>
+            <td><a href="mailto:{{ u.email }}">{{ u.email }}</a></td>
+            <td>{{ (u.created_at or '')[:10] }}</td>
+            <td>{{ u.household_name or '—' }}</td>
+            <td>{{ u.household_plan or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5">No users yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="account-card admin-card--wide">
+    <h2>Recent messages sent</h2>
+    {% if recent_messages %}
+    <ul class="admin-message-log">
+      {% for m in recent_messages %}
+      <li class="admin-message-log__item admin-message-log__item--{{ m.status }}">
+        <p class="admin-message-log__meta">
+          <strong>{{ m.to_email }}</strong>
+          · {{ (m.sent_at or '')[:16].replace('T', ' ') }}
+          · {{ m.status }}
+          {% if m.sender_name %}· by {{ m.sender_name }}{% endif %}
+        </p>
+        <p class="admin-message-log__subject">{{ m.subject }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="hint">No messages sent yet from this admin panel.</p>
+    {% endif %}
+  </article>
+</section>
+
+<script>
+  (function () {
+    const target = document.getElementById("admin-target");
+    const pick = document.getElementById("admin-user-pick");
+    if (!target || !pick) return;
+    const sync = () => {
+      pick.style.display = target.value === "all" ? "none" : "";
+    };
+    target.addEventListener("change", sync);
+    sync();
+  })();
+</script>
+{% endblock %}

@@ -2107,6 +2107,98 @@ body.page-app {
   box-shadow: var(--shadow);
 }
 
+.admin-grid {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.admin-card--wide {
+  grid-column: 1 / -1;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.admin-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.admin-table a {
+  color: var(--accent);
+  word-break: break-all;
+}
+
+.admin-send-form textarea {
+  width: 100%;
+  min-height: 8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  resize: vertical;
+}
+
+.admin-send-form select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  background: #fff;
+}
+
+.admin-message-log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-message-log__item {
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  background: rgba(31, 77, 58, 0.06);
+  border: 1px solid var(--line);
+}
+
+.admin-message-log__item--failed {
+  background: rgba(196, 92, 40, 0.08);
+  border-color: rgba(196, 92, 40, 0.25);
+}
+
+.admin-message-log__meta {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.admin-message-log__subject {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+
 .account-card--photo {
   padding: 0;
   overflow: hidden;

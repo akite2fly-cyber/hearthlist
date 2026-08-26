@@ -21,13 +21,14 @@ Same path as Daywing.
    - `TURSO_DATABASE_URL` — from Turso dashboard (e.g. `libsql://….turso.io`)
    - `TURSO_AUTH_TOKEN` — Turso database token
    - `DATA_DIR` — optional fallback only if Turso is not set (`/opt/render/project/src/data`)
-   - Stripe keys when ready (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_PRICE_MONTHLY`, …)
+   - Lemon Squeezy keys when ready (`LEMON_SQUEEZY_API_KEY`, `LEMON_SQUEEZY_STORE_ID`, `LEMON_SQUEEZY_VARIANT_MONTHLY`, `LEMON_SQUEEZY_WEBHOOK_SECRET`, …)
 5. Deploy → open the `.onrender.com` URL
 
 With Turso set, signups survive Render redeploys. Create the DB at [app.turso.tech](https://app.turso.tech/).
 
-## 3) Stripe live later
+## 3) Lemon Squeezy
 
-1. Create products/prices in Stripe
-2. Add price IDs to Render env
-3. Set webhook to `https://YOUR-APP.onrender.com/billing/webhook`
+1. Create product **Hearthlist** (subscription) in Lemon Squeezy — see `E:\winsome-anvil\LEMON-SETUP.md`
+2. Add variant IDs / API key / store ID to Render env
+3. Webhook URL: `https://YOUR-APP.onrender.com/billing/webhook`
+4. Events: `subscription_created`, `subscription_updated`, `subscription_cancelled`, `subscription_expired`, `subscription_payment_success`, `subscription_payment_failed`

@@ -2,7 +2,7 @@ services:
   - type: web
     name: hearthlist
     runtime: python
-    plan: free
+    plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
     healthCheckPath: /
@@ -19,13 +19,17 @@ services:
         sync: false
       - key: TURSO_AUTH_TOKEN
         sync: false
-      - key: STRIPE_SECRET_KEY
+      - key: LEMON_SQUEEZY_API_KEY
         sync: false
-      - key: STRIPE_PUBLISHABLE_KEY
+      - key: LEMON_SQUEEZY_STORE_ID
         sync: false
-      - key: STRIPE_WEBHOOK_SECRET
+      - key: LEMON_SQUEEZY_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_MONTHLY
+      - key: LEMON_SQUEEZY_VARIANT_MONTHLY
         sync: false
-      - key: STRIPE_PRICE_YEARLY
+      - key: LEMON_SQUEEZY_VARIANT_YEARLY
+        sync: false
+      - key: LEMON_SQUEEZY_CHECKOUT_MONTHLY
+        sync: false
+      - key: LEMON_SQUEEZY_CHECKOUT_YEARLY
         sync: false

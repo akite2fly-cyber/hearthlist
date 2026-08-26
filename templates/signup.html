@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sign up — Hearthlist{% endblock %}
+{% block title %}{% if joining %}Join household{% else %}Sign up{% endif %} — Hearthlist{% endblock %}
 {% block body_class %}page-auth{% endblock %}
 {% block content %}
 <div class="auth-layout auth-layout--compact">
@@ -8,8 +8,13 @@
   </aside>
   <main class="auth-card">
     <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
+    {% if joining and invite_household %}
+    <h1>Join {{ invite_household.name }}</h1>
+    <p class="auth-sub">Create your account to join this household.</p>
+    {% else %}
     <h1>Create your household</h1>
     <p class="auth-sub">7-day free trial. No card required.</p>
+    {% endif %}
     <form method="post" class="auth-form">
       <label>Your name
         <input type="text" name="name" required autocomplete="name" />
@@ -20,10 +25,14 @@
       <label>Password (at least 6 characters)
         <input type="password" name="password" required minlength="6" autocomplete="new-password" />
       </label>
+      {% if not joining %}
       <label>Household name
         <input type="text" name="household_name" placeholder="Our home" autocomplete="organization" />
       </label>
-      <button class="btn btn-primary btn-block btn-lg" type="submit">Start free trial</button>
+      {% endif %}
+      <button class="btn btn-primary btn-block btn-lg" type="submit">
+        {% if joining %}Join household{% else %}Start free trial{% endif %}
+      </button>
     </form>
     <p class="auth-foot">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
   </main>

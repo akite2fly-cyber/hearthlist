@@ -3,6 +3,7 @@ const panels = {
   groceries: document.getElementById("panel-groceries"),
   meals: document.getElementById("panel-meals"),
   chores: document.getElementById("panel-chores"),
+  schedule: document.getElementById("panel-schedule"),
   reminders: document.getElementById("panel-reminders"),
   people: document.getElementById("panel-people"),
 };
@@ -14,6 +15,8 @@ const TAB_HERO_IMAGES = {
     "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1500&h=500&q=80",
   chores:
     "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=1500&h=500&q=80",
+  schedule:
+    "https://images.unsplash.com/photo-1434626881859-194d67b2b86f?auto=format&fit=crop&w=1500&h=500&q=80",
   reminders:
     "https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=1500&h=500&q=80",
   people:
@@ -951,13 +954,15 @@ function buildChoreRow(item) {
 }
 
 function updateAssigneeSuggestions(names) {
-  const list = document.getElementById("chore-assignee-suggestions");
-  if (!list) return;
-  list.innerHTML = "";
-  for (const name of names) {
-    const opt = document.createElement("option");
-    opt.value = name;
-    list.appendChild(opt);
+  for (const listId of ["chore-assignee-suggestions", "schedule-assignee-suggestions"]) {
+    const list = document.getElementById(listId);
+    if (!list) continue;
+    list.innerHTML = "";
+    for (const name of names) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      list.appendChild(opt);
+    }
   }
 }
 
@@ -1238,6 +1243,338 @@ function printChoreWeekChart() {
 
 document.getElementById("print-chores")?.addEventListener("click", printChoreChart);
 document.getElementById("print-chores-week")?.addEventListener("click", printChoreWeekChart);
+
+const SHIFT_PRESET_TIMES = {
+  day: { start: "07:00", end: "15:00" },
+  evening: { start: "15:00", end: "23:00" },
+  night: { start: "23:00", end: "07:00" },
+};
+
+const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function formatShiftTimeRange(start, end) {
+  return `${start || "??"}–${end || "??"}`;
+}
+
+function shiftPresetLabel(preset) {
+  const key = (preset || "").toLowerCase();
+  if (key === "day") return "Day";
+  if (key === "evening") return "Evening";
+  if (key === "night") return "Night";
+  return "Custom";
+}
+
+function workShiftPrintLabel(item) {
+  const who = (item.assignee || "").trim() || "Unassigned";
+  const title = (item.title || "").trim() || "Shift";
+  const times = formatShiftTimeRange(item.start_time, item.end_time);
+  const preset = shiftPresetLabel(item.shift_preset);
+  return `${who} · ${title} · ${preset} ${times}`;
+}
+
+function workShiftsForWeekday(items, weekday) {
+  return (items || []).filter((item) => (item.weekdays || []).includes(weekday));
+}
+
+function buildWorkShiftRow(item) {
+  const li = el("li", "");
+  const body = el("div", "item-body");
+  body.appendChild(el("div", "item-title", item.title || "Shift"));
+  const days = (item.weekdays || []).map((d) => WEEKDAY_SHORT[d] || d).join(", ");
+  const meta = `${shiftPresetLabel(item.shift_preset)} · ${formatShiftTimeRange(
+    item.start_time,
+    item.end_time
+  )}${days ? ` · ${days}` : ""}${item.notes ? ` · ${item.notes}` : ""}`;
+  body.appendChild(el("div", "item-meta", meta));
+  const remove = el("button", "item-remove no-print", "Delete");
+  remove.type = "button";
+  remove.addEventListener("click", async () => {
+    if (!confirm("Delete this shift?")) return;
+    try {
+      await api(`/api/work-shifts/${item.id}`, { method: "DELETE" });
+      loadWorkShifts();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  li.append(body, remove);
+  return li;
+}
+
+async function loadWorkShifts() {
+  const groupsEl = document.getElementById("schedule-groups");
+  if (!groupsEl) return;
+  const data = await api("/api/work-shifts");
+  window.__hearthlistWorkShifts = data.items || [];
+  groupsEl.innerHTML = "";
+
+  const items = data.items || [];
+  if (!items.length) {
+    groupsEl.appendChild(el("p", "item-meta", "No work shifts yet."));
+    return;
+  }
+
+  const byName = new Map();
+  for (const item of items) {
+    const name = (item.assignee || "").trim() || "Unassigned";
+    if (!byName.has(name)) byName.set(name, []);
+    byName.get(name).push(item);
+  }
+  const names = [...byName.keys()].sort((a, b) => {
+    if (a === "Unassigned") return 1;
+    if (b === "Unassigned") return -1;
+    return a.localeCompare(b, undefined, { sensitivity: "base" });
+  });
+
+  const choreNames = (window.__hearthlistChores || [])
+    .map((c) => (c.assignee || "").trim())
+    .filter(Boolean);
+  updateAssigneeSuggestions(
+    [...new Set([...names.filter((n) => n !== "Unassigned"), ...choreNames])].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: "base" })
+    )
+  );
+
+  for (const name of names) {
+    const groupItems = byName.get(name);
+    const section = el("section", "chore-group");
+    section.dataset.assignee = name;
+    section.classList.add(assigneeColorClass(name));
+    const head = el("div", "chore-group-head");
+    head.appendChild(el("h3", "chore-group-name", name));
+    head.appendChild(el("span", "chore-group-count", `${groupItems.length} shift${groupItems.length === 1 ? "" : "s"}`));
+    section.appendChild(head);
+    const list = el("ul", "item-list chore-group-list");
+    for (const item of groupItems) list.appendChild(buildWorkShiftRow(item));
+    section.appendChild(list);
+    groupsEl.appendChild(section);
+  }
+}
+
+function buildPrintWorkWeekChart(workItems) {
+  const root = document.getElementById("schedule-print-calendar");
+  if (!root) return;
+  const weekDays = currentWeekDays();
+  const household = householdNameForPrint();
+  root.innerHTML = "";
+  root.hidden = false;
+  root.classList.add("chore-print-week");
+
+  const header = el("header", "chore-cal-header");
+  header.appendChild(el("p", "chore-cal-kicker", household));
+  header.appendChild(el("h2", "chore-cal-title", "This week’s work schedule"));
+  header.appendChild(el("p", "chore-cal-sub", `${formatWeekRange(weekDays)} · who works when`));
+  root.appendChild(header);
+
+  const people = [
+    ...new Set(workItems.map((i) => (i.assignee || "").trim() || "Unassigned")),
+  ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  const legend = el("div", "chore-cal-legend");
+  for (const name of people) {
+    const chip = el("span", `chore-cal-chip ${assigneeColorClass(name)}`);
+    chip.textContent = name;
+    legend.appendChild(chip);
+  }
+  root.appendChild(legend);
+
+  const grid = el("div", "chore-week-cal-grid");
+  const dowLabels = WEEKDAY_NAMES;
+  weekDays.forEach((day, idx) => {
+    const cell = el("div", "chore-week-cal-day");
+    const top = el("div", "chore-week-cal-top");
+    top.appendChild(el("div", "chore-week-cal-dow", dowLabels[idx]));
+    top.appendChild(el("div", "chore-cal-daynum", String(day.getDate())));
+    cell.appendChild(top);
+    const dayItems = workShiftsForWeekday(workItems, idx);
+    for (const item of dayItems) {
+      const who = (item.assignee || "").trim() || "Unassigned";
+      const row = el("div", `chore-cal-entry ${assigneeColorClass(who)}`);
+      row.appendChild(el("span", "chore-cal-entry-text", workShiftPrintLabel(item)));
+      cell.appendChild(row);
+    }
+    if (!dayItems.length) cell.appendChild(el("p", "chore-week-cal-empty", "No shifts"));
+    grid.appendChild(cell);
+  });
+  root.appendChild(grid);
+}
+
+function buildPrintCombinedWeekChart(choreItems, workItems) {
+  const root = document.getElementById("schedule-print-calendar");
+  if (!root) return;
+  const weekDays = currentWeekDays();
+  const household = householdNameForPrint();
+  root.innerHTML = "";
+  root.hidden = false;
+  root.classList.add("chore-print-week");
+
+  const header = el("header", "chore-cal-header");
+  header.appendChild(el("p", "chore-cal-kicker", household));
+  header.appendChild(el("h2", "chore-cal-title", "This week — chores & work"));
+  header.appendChild(el("p", "chore-cal-sub", `${formatWeekRange(weekDays)} · home + work on one sheet`));
+  root.appendChild(header);
+
+  const people = [
+    ...new Set([
+      ...choreItems.map((i) => (i.assignee || "").trim() || "Unassigned"),
+      ...workItems.map((i) => (i.assignee || "").trim() || "Unassigned"),
+    ]),
+  ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+  const legend = el("div", "chore-cal-legend");
+  for (const name of people) {
+    const chip = el("span", `chore-cal-chip ${assigneeColorClass(name)}`);
+    chip.textContent = name;
+    legend.appendChild(chip);
+  }
+  root.appendChild(legend);
+
+  const grid = el("div", "chore-week-cal-grid");
+  weekDays.forEach((day, idx) => {
+    const cell = el("div", "chore-week-cal-day");
+    const top = el("div", "chore-week-cal-top");
+    top.appendChild(el("div", "chore-week-cal-dow", WEEKDAY_NAMES[idx]));
+    top.appendChild(el("div", "chore-cal-daynum", String(day.getDate())));
+    cell.appendChild(top);
+
+    const chores = choresForCalendarDay(choreItems, day);
+    const shifts = workShiftsForWeekday(workItems, idx);
+
+    if (chores.length) {
+      cell.appendChild(el("p", "schedule-print-section-label", "Chores"));
+      for (const item of chores) {
+        const who = (item.assignee || "").trim() || "Unassigned";
+        const row = el("div", `chore-cal-entry ${assigneeColorClass(who)}`);
+        row.appendChild(el("span", "chore-cal-check", ""));
+        row.appendChild(el("span", "chore-cal-entry-text", chorePrintLabel(item)));
+        cell.appendChild(row);
+      }
+    }
+    if (shifts.length) {
+      cell.appendChild(el("p", "schedule-print-section-label", "Work"));
+      for (const item of shifts) {
+        const who = (item.assignee || "").trim() || "Unassigned";
+        const row = el("div", `chore-cal-entry ${assigneeColorClass(who)}`);
+        row.appendChild(el("span", "chore-cal-entry-text", workShiftPrintLabel(item)));
+        cell.appendChild(row);
+      }
+    }
+    if (!chores.length && !shifts.length) {
+      cell.appendChild(el("p", "chore-week-cal-empty", "Nothing scheduled"));
+    }
+    grid.appendChild(cell);
+  });
+  root.appendChild(grid);
+}
+
+function runSchedulePrint({ mode, titleText }) {
+  const workItems = window.__hearthlistWorkShifts || [];
+  const choreItems = window.__hearthlistChores || [];
+  if (mode === "work" && !workItems.length) {
+    alert("Add work shifts before printing.");
+    return;
+  }
+  if (mode === "combined" && !workItems.length && !choreItems.length) {
+    alert("Add chores or work shifts before printing.");
+    return;
+  }
+  if (mode === "work") buildPrintWorkWeekChart(workItems);
+  else buildPrintCombinedWeekChart(choreItems, workItems);
+
+  document.body.classList.add(mode === "work" ? "printing-work" : "printing-combined");
+  const title = document.title;
+  document.title = titleText;
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    document.body.classList.remove("printing-work", "printing-combined");
+    document.title = title;
+    const cal = document.getElementById("schedule-print-calendar");
+    if (cal) {
+      cal.hidden = true;
+      cal.innerHTML = "";
+      cal.classList.remove("chore-print-week");
+    }
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      window.print();
+      setTimeout(cleanup, 60000);
+    });
+  });
+}
+
+function printWorkWeekChart() {
+  runSchedulePrint({
+    mode: "work",
+    titleText: `${householdNameForPrint()} work schedule`,
+  });
+}
+
+function printCombinedWeekChart() {
+  runSchedulePrint({
+    mode: "combined",
+    titleText: `${householdNameForPrint()} chores & work`,
+  });
+}
+
+document.getElementById("print-work-week")?.addEventListener("click", printWorkWeekChart);
+document.getElementById("print-combined-week")?.addEventListener("click", printCombinedWeekChart);
+
+const schedulePreset = document.getElementById("schedule-preset");
+const scheduleStart = document.getElementById("schedule-start");
+const scheduleEnd = document.getElementById("schedule-end");
+if (schedulePreset && scheduleStart && scheduleEnd) {
+  schedulePreset.addEventListener("change", () => {
+    const preset = SHIFT_PRESET_TIMES[schedulePreset.value];
+    if (!preset) return;
+    scheduleStart.value = preset.start;
+    scheduleEnd.value = preset.end;
+  });
+}
+
+const scheduleForm = document.getElementById("schedule-form");
+if (scheduleForm) {
+  scheduleForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const title = document.getElementById("schedule-title").value.trim();
+    const assignee = document.getElementById("schedule-assignee").value.trim();
+    const shift_preset = document.getElementById("schedule-preset").value;
+    const start_time = document.getElementById("schedule-start").value;
+    const end_time = document.getElementById("schedule-end").value;
+    const notes = document.getElementById("schedule-notes").value.trim();
+    const weekdays = [...document.querySelectorAll('input[name="schedule-weekday"]:checked')].map(
+      (el) => Number(el.value)
+    );
+    if (!title || !assignee) return;
+    if (!weekdays.length) {
+      alert("Pick at least one weekday.");
+      return;
+    }
+    try {
+      await api("/api/work-shifts", {
+        method: "POST",
+        body: JSON.stringify({
+          title,
+          assignee,
+          shift_preset,
+          start_time,
+          end_time,
+          weekdays,
+          notes,
+        }),
+      });
+      scheduleForm.reset();
+      document.getElementById("schedule-preset").value = "day";
+      document.getElementById("schedule-start").value = "07:00";
+      document.getElementById("schedule-end").value = "15:00";
+      loadWorkShifts();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+}
 
 const choreRecurrence = document.getElementById("chore-recurrence");
 const choreWeekday = document.getElementById("chore-weekday");
@@ -1530,7 +1867,7 @@ if (reminderForm) {
   });
 }
 
-Promise.all([loadGroceries(), loadMeals(), loadChores(), loadReminders()])
+Promise.all([loadGroceries(), loadMeals(), loadChores(), loadWorkShifts(), loadReminders()])
   .then(() => {
     updateNotifyStatus();
     ensureServiceWorker();

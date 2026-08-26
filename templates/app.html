@@ -38,6 +38,7 @@
   <button type="button" class="tab is-active" data-tab="groceries" role="tab" aria-selected="true">Groceries</button>
   <button type="button" class="tab" data-tab="meals" role="tab" aria-selected="false">Meals</button>
   <button type="button" class="tab" data-tab="chores" role="tab" aria-selected="false">Chores</button>
+  <button type="button" class="tab" data-tab="schedule" role="tab" aria-selected="false">Schedule</button>
   <button type="button" class="tab" data-tab="reminders" role="tab" aria-selected="false">Reminders</button>
   <button type="button" class="tab" data-tab="people" role="tab" aria-selected="false">People</button>
 </nav>
@@ -118,6 +119,45 @@
     </form>
     <div id="chore-groups" class="chore-groups"></div>
     <div id="chore-print-calendar" class="chore-print-calendar print-only" hidden aria-hidden="true"></div>
+  </section>
+
+  <section class="panel" id="panel-schedule" role="tabpanel" hidden>
+    <div class="panel-head">
+      <div>
+        <h2>Work schedule</h2>
+        <p class="hint">Who works when — Day, Evening, or Night shifts. Print work alone or combined with chores.</p>
+      </div>
+      <div class="panel-head-actions">
+        <button type="button" class="btn btn-ghost" id="print-work-week">Print work week</button>
+        <button type="button" class="btn btn-ghost" id="print-combined-week">Print combined week</button>
+      </div>
+    </div>
+    <form id="schedule-form" class="schedule-form chore-form no-print">
+      <input id="schedule-assignee" type="text" placeholder="Who?" maxlength="80" list="schedule-assignee-suggestions" required />
+      <datalist id="schedule-assignee-suggestions"></datalist>
+      <input id="schedule-title" type="text" placeholder="Job / workplace" maxlength="200" required />
+      <select id="schedule-preset" title="Shift">
+        <option value="day">Day</option>
+        <option value="evening">Evening</option>
+        <option value="night">Night</option>
+        <option value="custom">Custom</option>
+      </select>
+      <input id="schedule-start" type="time" value="07:00" required title="Start" />
+      <input id="schedule-end" type="time" value="15:00" required title="End" />
+      <div class="schedule-weekdays" role="group" aria-label="Weekdays">
+        <label><input type="checkbox" name="schedule-weekday" value="0" /> Mon</label>
+        <label><input type="checkbox" name="schedule-weekday" value="1" /> Tue</label>
+        <label><input type="checkbox" name="schedule-weekday" value="2" /> Wed</label>
+        <label><input type="checkbox" name="schedule-weekday" value="3" /> Thu</label>
+        <label><input type="checkbox" name="schedule-weekday" value="4" /> Fri</label>
+        <label><input type="checkbox" name="schedule-weekday" value="5" /> Sat</label>
+        <label><input type="checkbox" name="schedule-weekday" value="6" /> Sun</label>
+      </div>
+      <input id="schedule-notes" type="text" placeholder="Notes (optional)" maxlength="300" />
+      <button class="btn btn-primary" type="submit">Add shift</button>
+    </form>
+    <div id="schedule-groups" class="chore-groups schedule-groups"></div>
+    <div id="schedule-print-calendar" class="chore-print-calendar schedule-print-calendar print-only" hidden aria-hidden="true"></div>
   </section>
 
   <section class="panel" id="panel-reminders" role="tabpanel" hidden>

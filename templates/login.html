@@ -9,7 +9,12 @@
   <main class="auth-card">
     <a class="brand" href="{{ url_for('landing') }}">Hearthlist</a>
     <h1>Sign in</h1>
+    {% if joining %}
+    <p class="auth-sub">Sign in to join the household you were invited to.</p>
+    {% else %}
     <p class="auth-sub">Use the email and password for your household.</p>
+    {% endif %}
+
     {% if login_error %}
     <p class="auth-error" role="alert">{{ login_error }}</p>
     {% endif %}

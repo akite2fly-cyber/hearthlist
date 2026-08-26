@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
+import hmac
 import re
 import secrets
 import smtplib
 import sqlite3
 import string
+import urllib.error
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from flask import (
     Flask,
@@ -27,11 +32,6 @@ from flask import (
     url_for,
 )
 from werkzeug.security import check_password_hash, generate_password_hash
-
-try:
-    import stripe
-except ImportError:  # pragma: no cover
-    stripe = None
 
 try:
     import libsql
@@ -71,11 +71,13 @@ def ensure_env() -> dict[str, str]:
         "BASE_URL",
         "TURSO_DATABASE_URL",
         "TURSO_AUTH_TOKEN",
-        "STRIPE_SECRET_KEY",
-        "STRIPE_PUBLISHABLE_KEY",
-        "STRIPE_WEBHOOK_SECRET",
-        "STRIPE_PRICE_MONTHLY",
-        "STRIPE_PRICE_YEARLY",
+        "LEMON_SQUEEZY_API_KEY",
+        "LEMON_SQUEEZY_STORE_ID",
+        "LEMON_SQUEEZY_WEBHOOK_SECRET",
+        "LEMON_SQUEEZY_VARIANT_MONTHLY",
+        "LEMON_SQUEEZY_VARIANT_YEARLY",
+        "LEMON_SQUEEZY_CHECKOUT_MONTHLY",
+        "LEMON_SQUEEZY_CHECKOUT_YEARLY",
         "SMTP_HOST",
         "SMTP_PORT",
         "SMTP_USER",
@@ -169,9 +171,6 @@ app.config.update(
     SESSION_COOKIE_SECURE=IS_PRODUCTION,
     PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
 )
-
-if stripe and os.environ.get("STRIPE_SECRET_KEY"):
-    stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 
 def static_asset(filename: str) -> str:
@@ -342,8 +341,8 @@ def init_db() -> None:
             owner_id INTEGER NOT NULL,
             trial_ends_at TEXT NOT NULL,
             plan TEXT NOT NULL DEFAULT 'trial',
-            stripe_customer_id TEXT,
-            stripe_subscription_id TEXT,
+            lemon_customer_id TEXT,
+            lemon_subscription_id TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(owner_id) REFERENCES users(id)
         );
@@ -416,6 +415,20 @@ def init_db() -> None:
             created_at TEXT NOT NULL,
             FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS work_shifts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            household_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            assignee TEXT NOT NULL DEFAULT '',
+            shift_preset TEXT NOT NULL DEFAULT 'day',
+            start_time TEXT NOT NULL DEFAULT '07:00',
+            end_time TEXT NOT NULL DEFAULT '15:00',
+            weekdays TEXT NOT NULL DEFAULT '',
+            notes TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(household_id) REFERENCES households(id) ON DELETE CASCADE
+        );
         """
     )
     # Migrations for older local/prod DBs
@@ -433,6 +446,13 @@ def init_db() -> None:
         db.execute("ALTER TABLE meal_slots ADD COLUMN recipe_url TEXT NOT NULL DEFAULT ''")
     if "ingredients" not in meal_cols:
         db.execute("ALTER TABLE meal_slots ADD COLUMN ingredients TEXT NOT NULL DEFAULT '[]'")
+    household_cols = {
+        str(row[1]).lower() for row in db.execute("PRAGMA table_info(households)").fetchall()
+    }
+    if "lemon_customer_id" not in household_cols:
+        db.execute("ALTER TABLE households ADD COLUMN lemon_customer_id TEXT")
+    if "lemon_subscription_id" not in household_cols:
+        db.execute("ALTER TABLE households ADD COLUMN lemon_subscription_id TEXT")
     db.commit()
     db.close()
 
@@ -539,6 +559,66 @@ def chore_row(r: Any) -> dict:
             if "recurrence_weekday" in keys and r["recurrence_weekday"] is not None
             else None
         ),
+        "created_at": r["created_at"],
+    }
+
+
+SHIFT_PRESET_TIMES = {
+    "day": ("07:00", "15:00"),
+    "evening": ("15:00", "23:00"),
+    "night": ("23:00", "07:00"),
+}
+
+
+def parse_weekdays(raw: Any) -> list[int]:
+    if raw is None or raw == "":
+        return []
+    if isinstance(raw, list):
+        items = raw
+    elif isinstance(raw, str):
+        items = [p.strip() for p in raw.split(",") if p.strip() != ""]
+    else:
+        items = []
+    out: list[int] = []
+    for item in items:
+        try:
+            day = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= day <= 6 and day not in out:
+            out.append(day)
+    return sorted(out)
+
+
+def weekdays_to_storage(days: list[int]) -> str:
+    return ",".join(str(d) for d in days)
+
+
+def normalize_hhmm(value: Any) -> str | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        hour_s, minute_s = text.split(":", 1)
+        hour = int(hour_s)
+        minute = int(minute_s[:2])
+    except (TypeError, ValueError):
+        return None
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def work_shift_row(r: Any) -> dict:
+    return {
+        "id": r["id"],
+        "title": r["title"],
+        "assignee": r["assignee"] or "",
+        "shift_preset": r["shift_preset"] or "day",
+        "start_time": r["start_time"] or "07:00",
+        "end_time": r["end_time"] or "15:00",
+        "weekdays": parse_weekdays(r["weekdays"]),
+        "notes": r["notes"] or "",
         "created_at": r["created_at"],
     }
 
@@ -681,8 +761,9 @@ def plan_status(household) -> dict:
     trial_ends = parse_iso(household["trial_ends_at"] if household else None)
     now = utc_now()
     trial_active = bool(trial_ends and now <= trial_ends)
-    subscribed = plan in ("active", "past_due") and bool(household["stripe_subscription_id"])
-    # Treat explicit active plan even without stripe id (manual/test)
+    sub_id = household_field(household, "lemon_subscription_id")
+    subscribed = plan in ("active", "past_due") and bool(sub_id)
+    # Treat explicit active plan even without subscription id (manual/test)
     if plan == "active":
         subscribed = True
     access = subscribed or trial_active
@@ -697,11 +778,28 @@ def plan_status(household) -> dict:
         "member_count": members,
         "member_limit": member_limit,
         "can_invite": access and members < member_limit,
-        "stripe_ready": bool(os.environ.get("STRIPE_SECRET_KEY") and os.environ.get("STRIPE_PRICE_MONTHLY")),
+        "lemon_ready": lemon_ready(),
     }
 
 
-def stripe_val(obj: Any, key: str, default: Any = None) -> Any:
+def household_field(household: Any, key: str, default: Any = None) -> Any:
+    if not household:
+        return default
+    keys = household.keys()
+    if key in keys:
+        return household[key]
+    return default
+
+
+def lemon_ready() -> bool:
+    has_variants = bool(
+        (os.environ.get("LEMON_SQUEEZY_VARIANT_MONTHLY") or "").strip()
+        or (os.environ.get("LEMON_SQUEEZY_CHECKOUT_MONTHLY") or "").strip()
+    )
+    return has_variants
+
+
+def dig(obj: Any, key: str, default: Any = None) -> Any:
     if obj is None:
         return default
     if isinstance(obj, dict):
@@ -712,31 +810,27 @@ def stripe_val(obj: Any, key: str, default: Any = None) -> Any:
         return default
 
 
-def stripe_id(value: Any) -> str | None:
-    if not value:
-        return None
-    if isinstance(value, str):
-        return value
-    found = stripe_val(value, "id")
-    return str(found) if found else None
-
-
-def mark_household_plan(household_id: int, plan: str, subscription_id: str | None = None, customer_id: str | None = None) -> None:
+def mark_household_plan(
+    household_id: int,
+    plan: str,
+    subscription_id: str | None = None,
+    customer_id: str | None = None,
+) -> None:
     db = get_db()
-    subscription_id = stripe_id(subscription_id)
-    customer_id = stripe_id(customer_id) or customer_id
+    subscription_id = str(subscription_id).strip() if subscription_id else None
+    customer_id = str(customer_id).strip() if customer_id else None
     if subscription_id and customer_id:
         db.execute(
             """
             UPDATE households
-            SET plan = ?, stripe_subscription_id = ?, stripe_customer_id = COALESCE(stripe_customer_id, ?)
+            SET plan = ?, lemon_subscription_id = ?, lemon_customer_id = COALESCE(lemon_customer_id, ?)
             WHERE id = ?
             """,
             (plan, subscription_id, customer_id, household_id),
         )
     elif subscription_id:
         db.execute(
-            "UPDATE households SET plan = ?, stripe_subscription_id = ? WHERE id = ?",
+            "UPDATE households SET plan = ?, lemon_subscription_id = ? WHERE id = ?",
             (plan, subscription_id, household_id),
         )
     else:
@@ -744,38 +838,71 @@ def mark_household_plan(household_id: int, plan: str, subscription_id: str | Non
     db.commit()
 
 
-def sync_household_plan_from_stripe(household) -> None:
-    """Reflect Stripe subscription state locally (covers missed webhooks, including cancels)."""
-    if not household or not stripe or not os.environ.get("STRIPE_SECRET_KEY"):
-        return
-    customer_id = household["stripe_customer_id"]
-    if not customer_id:
-        return
-    try:
-        subs = stripe.Subscription.list(customer=str(customer_id), limit=10)
-        records = []
-        try:
-            records = list(subs["data"])
-        except Exception:
-            records = []
-        chosen = None
-        for sub in records:
-            if stripe_val(sub, "status") in ("active", "trialing", "past_due"):
-                chosen = sub
-                break
-        if not chosen and records:
-            chosen = records[0]
-        local_plan = (household["plan"] or "").strip()
-        looks_subscribed = local_plan in ("active", "past_due") or bool(household["stripe_subscription_id"])
-        if not chosen:
-            if looks_subscribed:
-                mark_household_plan(int(household["id"]), "canceled", household["stripe_subscription_id"], customer_id)
-            return
-        status = stripe_val(chosen, "status") or ""
-        plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
-        mark_household_plan(int(household["id"]), plan, stripe_val(chosen, "id"), customer_id)
-    except Exception as exc:  # pragma: no cover
-        print(f"Stripe subscription sync failed: {exc}")
+def lemon_api_request(method: str, path: str, payload: dict | None = None) -> dict:
+    api_key = (os.environ.get("LEMON_SQUEEZY_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("LEMON_SQUEEZY_API_KEY not set")
+    body = None if payload is None else json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://api.lemonsqueezy.com/v1{path}",
+        data=body,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Accept": "application/vnd.api+json",
+            "Content-Type": "application/vnd.api+json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        raw = resp.read().decode("utf-8")
+    return json.loads(raw) if raw else {}
+
+
+def build_lemon_checkout_url(variant_or_share: str, *, email: str, household_id: int) -> str:
+    """Append email + household_id custom data to a Lemon buy/share URL or variant checkout."""
+    url = variant_or_share.strip()
+    if url.isdigit():
+        # Bare variant id — needs a share URL in env; fall through as query-only won't work.
+        raise ValueError("Use a full Lemon Squeezy checkout/share URL or API checkout")
+    sep = "&" if "?" in url else "?"
+    return (
+        f"{url}{sep}"
+        f"checkout[email]={quote(email)}"
+        f"&checkout[custom][household_id]={quote(str(household_id))}"
+    )
+
+
+def create_lemon_checkout_url(*, variant_id: str, email: str, name: str, household_id: int, redirect_url: str) -> str:
+    store_id = (os.environ.get("LEMON_SQUEEZY_STORE_ID") or "").strip()
+    if not store_id:
+        raise RuntimeError("LEMON_SQUEEZY_STORE_ID not set")
+    payload = {
+        "data": {
+            "type": "checkouts",
+            "attributes": {
+                "checkout_data": {
+                    "email": email,
+                    "name": name,
+                    "custom": {"household_id": str(household_id)},
+                },
+                "product_options": {"redirect_url": redirect_url},
+            },
+            "relationships": {
+                "store": {"data": {"type": "stores", "id": str(store_id)}},
+                "variant": {"data": {"type": "variants", "id": str(variant_id)}},
+            },
+        }
+    }
+    data = lemon_api_request("POST", "/checkouts", payload)
+    url = dig(dig(dig(data, "data"), "attributes"), "url")
+    if not url:
+        raise RuntimeError("Lemon Squeezy checkout did not return a URL")
+    return str(url)
+
+
+def verify_lemon_signature(raw_body: bytes, signature: str, secret: str) -> bool:
+    digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, (signature or "").strip())
 
 
 def login_required(view):
@@ -805,6 +932,25 @@ def require_household(view):
     return wrapped
 
 
+def pending_invite_code() -> str:
+    return (session.get("pending_invite") or "").strip().upper()
+
+
+def lookup_invite_household(code: str):
+    """Return (household, error_message). household is None when invite cannot be used."""
+    code = (code or "").strip().upper()
+    if not code:
+        return None, "Enter an invite code."
+    household = get_db().execute(
+        "SELECT * FROM households WHERE invite_code = ?", (code,)
+    ).fetchone()
+    if not household:
+        return None, "Invite code not found."
+    if not plan_status(household)["can_invite"]:
+        return None, "This household can’t add more members on its current plan."
+    return household, None
+
+
 def week_dates(anchor: date | None = None) -> list[date]:
     today = anchor or date.today()
     start = today - timedelta(days=today.weekday())  # Monday
@@ -819,7 +965,6 @@ def inject_globals():
         "current_user": user,
         "current_household": household,
         "plan": plan_status(household) if household else None,
-        "stripe_pk": os.environ.get("STRIPE_PUBLISHABLE_KEY", ""),
     }
 
 
@@ -835,25 +980,65 @@ def landing():
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
+    invite_code_pending = pending_invite_code()
+    invite_household, invite_error = (
+        lookup_invite_household(invite_code_pending) if invite_code_pending else (None, None)
+    )
+    if invite_code_pending and invite_error:
+        session.pop("pending_invite", None)
+        flash(invite_error, "error")
+        invite_household = None
+        invite_code_pending = ""
+
     if current_user():
+        if invite_code_pending:
+            return redirect(url_for("join_redeem"))
         return redirect(url_for("home"))
+
     if request.method == "GET":
-        return render_template("signup.html")
+        return render_template(
+            "signup.html",
+            joining=bool(invite_household),
+            invite_household=invite_household,
+        )
 
     email = (request.form.get("email") or "").strip().lower()
     name = (request.form.get("name") or "").strip()
     password = request.form.get("password") or ""
     household_name = (request.form.get("household_name") or "").strip() or "Our home"
 
+    joining = bool(invite_household)
     if not email or not name or len(password) < 6:
         flash("Please fill all fields. Password must be at least 6 characters.", "error")
-        return render_template("signup.html"), 400
+        return (
+            render_template(
+                "signup.html",
+                joining=joining,
+                invite_household=invite_household,
+            ),
+            400,
+        )
 
     db = get_db()
     existing = db.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
     if existing:
         flash("That email is already registered. Try signing in.", "error")
-        return render_template("signup.html"), 400
+        return (
+            render_template(
+                "signup.html",
+                joining=joining,
+                invite_household=invite_household,
+            ),
+            400,
+        )
+
+    # Re-check invite at submit time (capacity / code may have changed).
+    if invite_code_pending:
+        invite_household, invite_error = lookup_invite_household(invite_code_pending)
+        if invite_error or not invite_household:
+            session.pop("pending_invite", None)
+            flash(invite_error or "Invite code not found.", "error")
+            return render_template("signup.html", joining=False, invite_household=None), 400
 
     now = utc_now_iso()
     cur = db.execute(
@@ -861,6 +1046,19 @@ def signup():
         (email, name, generate_password_hash(password), now),
     )
     user_id = cur.lastrowid
+
+    if invite_household:
+        db.execute(
+            "INSERT INTO memberships (household_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+            (invite_household["id"], user_id, now),
+        )
+        db.commit()
+        session.clear()
+        session["user_id"] = user_id
+        session.permanent = True
+        flash(f"Welcome — you joined {invite_household['name']}!", "ok")
+        return redirect(url_for("home"))
+
     code = invite_code()
     trial_end = (utc_now() + timedelta(days=TRIAL_DAYS)).isoformat(timespec="seconds").replace("+00:00", "Z")
     hcur = db.execute(
@@ -884,10 +1082,16 @@ def signup():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    invite_code_pending = pending_invite_code()
     if current_user():
+        if invite_code_pending:
+            return redirect(url_for("join_redeem"))
         return redirect(url_for("home"))
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template(
+            "login.html",
+            joining=bool(invite_code_pending),
+        )
 
     email = (request.form.get("email") or "").strip().lower()
     password = request.form.get("password") or ""
@@ -898,14 +1102,21 @@ def login():
             render_template(
                 "login.html",
                 email=email,
+                joining=bool(invite_code_pending),
                 login_error="Incorrect email or password. Try again, or use Forgot password.",
             ),
             401,
         )
 
+    # Preserve invite across session.clear() so join_redeem can finish.
+    pending = pending_invite_code()
     session.clear()
     session["user_id"] = user["id"]
     session.permanent = True
+    if pending:
+        session["pending_invite"] = pending
+        return redirect(url_for("join_redeem"))
+
     nxt = request.args.get("next") or url_for("home")
     if not nxt.startswith("/") or nxt.startswith("//"):
         nxt = url_for("home")
@@ -1068,32 +1279,10 @@ def account(household, user):
     try:
         if request.args.get("checkout") == "cancel":
             flash("Checkout canceled. Your trial is unchanged.", "ok")
-        session_id = (request.args.get("session_id") or "").strip()
-        if stripe and os.environ.get("STRIPE_SECRET_KEY") and session_id:
-            try:
-                checkout = stripe.checkout.Session.retrieve(session_id)
-                metadata = stripe_val(checkout, "metadata") or {}
-                household_id = None
-                if isinstance(metadata, dict):
-                    household_id = metadata.get("household_id")
-                else:
-                    household_id = stripe_val(metadata, "household_id")
-                if household_id and int(household_id) == int(household["id"]):
-                    mark_household_plan(
-                        int(household["id"]),
-                        "active",
-                        stripe_val(checkout, "subscription"),
-                        stripe_val(checkout, "customer"),
-                    )
-            except Exception as exc:  # pragma: no cover
-                print(f"Checkout session lookup failed: {exc}")
-        status = plan_status(household)
-        # Always reconcile with Stripe so cancels/missed webhooks update an already-active plan.
-        sync_household_plan_from_stripe(household)
+        if request.args.get("checkout") == "success":
+            flash("Thanks! If payment completed, your plan will unlock in a moment.", "ok")
         household = user_household(user["id"]) or household
         status = plan_status(household)
-        if request.args.get("checkout") == "success" and status.get("subscribed"):
-            flash("Subscription is active. Thank you!", "ok")
         return render_template("account.html", household=household, user=user, status=status)
     except Exception as exc:  # pragma: no cover
         print(f"Account page failed: {exc}")
@@ -1160,7 +1349,7 @@ def join_link(code: str):
 def join_redeem():
     user = current_user()
     existing = user_household(user["id"])
-    code = (request.form.get("invite_code") if request.method == "POST" else None) or session.get("pending_invite") or ""
+    code = (request.form.get("invite_code") if request.method == "POST" else None) or pending_invite_code()
     code = code.strip().upper()
 
     if request.method == "GET" and not code:
@@ -1173,23 +1362,27 @@ def join_redeem():
     db = get_db()
     household = db.execute("SELECT * FROM households WHERE invite_code = ?", (code,)).fetchone()
     if not household:
+        session.pop("pending_invite", None)
         flash("Invite code not found.", "error")
         return render_template("join.html", code=code)
 
     if existing and existing["id"] != household["id"]:
+        session.pop("pending_invite", None)
         flash("You’re already in a household. Leave that one before joining another (v1 supports one).", "error")
         return redirect(url_for("home"))
 
-    status = plan_status(household)
     if existing and existing["id"] == household["id"]:
         session.pop("pending_invite", None)
         return redirect(url_for("home"))
 
-    if not status["can_invite"] and not existing:
+    status = plan_status(household)
+    if not status["can_invite"]:
+        session.pop("pending_invite", None)
         flash("This household is full on its current plan.", "error")
         return render_template("join.html", code=code)
 
-    if request.method == "POST" or session.get("pending_invite"):
+    # Auto-join when arriving from /join/<code> (pending invite) or after login.
+    if request.method == "POST" or pending_invite_code():
         db.execute(
             "INSERT OR IGNORE INTO memberships (household_id, user_id, role, joined_at) VALUES (?, ?, 'member', ?)",
             (household["id"], user["id"], utc_now_iso()),
@@ -1632,6 +1825,180 @@ def api_chores_delete(chore_id: int):
     return jsonify({"ok": True})
 
 
+@app.get("/api/work-shifts")
+@login_required
+def api_work_shifts_list():
+    user, household, err = household_for_api()
+    if err:
+        return err
+    rows = get_db().execute(
+        """
+        SELECT id, title, assignee, shift_preset, start_time, end_time, weekdays, notes, created_at
+        FROM work_shifts
+        WHERE household_id = ?
+        ORDER BY id DESC
+        """,
+        (household["id"],),
+    ).fetchall()
+    return jsonify({"items": [work_shift_row(r) for r in rows]})
+
+
+@app.post("/api/work-shifts")
+@login_required
+def api_work_shifts_create():
+    user, household, err = household_for_api()
+    if err:
+        return err
+    if not plan_status(household)["access"]:
+        return jsonify({"error": "Trial ended. Subscribe to keep editing."}), 402
+    payload = request.get_json(silent=True) or {}
+    title = (payload.get("title") or "").strip()
+    assignee = (payload.get("assignee") or "").strip()[:80]
+    notes = (payload.get("notes") or "").strip()[:300]
+    shift_preset = (payload.get("shift_preset") or "day").strip().lower()
+    if shift_preset not in ("day", "evening", "night", "custom"):
+        return jsonify({"error": "shift_preset must be day, evening, night, or custom"}), 400
+    weekdays = parse_weekdays(payload.get("weekdays"))
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    if not weekdays:
+        return jsonify({"error": "Pick at least one weekday"}), 400
+
+    default_start, default_end = SHIFT_PRESET_TIMES.get(shift_preset, ("07:00", "15:00"))
+    start_time = normalize_hhmm(payload.get("start_time")) or default_start
+    end_time = normalize_hhmm(payload.get("end_time")) or default_end
+
+    db = get_db()
+    cur = db.execute(
+        """
+        INSERT INTO work_shifts (
+            household_id, title, assignee, shift_preset, start_time, end_time, weekdays, notes, created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            household["id"],
+            title[:200],
+            assignee,
+            shift_preset,
+            start_time,
+            end_time,
+            weekdays_to_storage(weekdays),
+            notes,
+            utc_now_iso(),
+        ),
+    )
+    db.commit()
+    row = db.execute(
+        """
+        SELECT id, title, assignee, shift_preset, start_time, end_time, weekdays, notes, created_at
+        FROM work_shifts WHERE id = ?
+        """,
+        (cur.lastrowid,),
+    ).fetchone()
+    return jsonify(work_shift_row(row)), 201
+
+
+@app.patch("/api/work-shifts/<int:shift_id>")
+@login_required
+def api_work_shifts_update(shift_id: int):
+    user, household, err = household_for_api()
+    if err:
+        return err
+    if not plan_status(household)["access"]:
+        return jsonify({"error": "Trial ended. Subscribe to keep editing."}), 402
+    db = get_db()
+    row = db.execute(
+        """
+        SELECT id, title, assignee, shift_preset, start_time, end_time, weekdays, notes, created_at
+        FROM work_shifts WHERE id = ? AND household_id = ?
+        """,
+        (shift_id, household["id"]),
+    ).fetchone()
+    if not row:
+        return jsonify({"error": "Not found"}), 404
+    payload = request.get_json(silent=True) or {}
+    title = row["title"]
+    assignee = row["assignee"] or ""
+    notes = row["notes"] or ""
+    shift_preset = row["shift_preset"] or "day"
+    start_time = row["start_time"] or "07:00"
+    end_time = row["end_time"] or "15:00"
+    weekdays = parse_weekdays(row["weekdays"])
+
+    if "title" in payload:
+        title = str(payload["title"]).strip()[:200]
+        if not title:
+            return jsonify({"error": "title required"}), 400
+    if "assignee" in payload:
+        assignee = str(payload["assignee"]).strip()[:80]
+    if "notes" in payload:
+        notes = str(payload["notes"]).strip()[:300]
+    if "shift_preset" in payload:
+        shift_preset = str(payload["shift_preset"]).strip().lower()
+        if shift_preset not in ("day", "evening", "night", "custom"):
+            return jsonify({"error": "invalid shift_preset"}), 400
+    if "weekdays" in payload:
+        weekdays = parse_weekdays(payload.get("weekdays"))
+        if not weekdays:
+            return jsonify({"error": "Pick at least one weekday"}), 400
+    if "start_time" in payload:
+        parsed = normalize_hhmm(payload.get("start_time"))
+        if not parsed:
+            return jsonify({"error": "invalid start_time"}), 400
+        start_time = parsed
+    if "end_time" in payload:
+        parsed = normalize_hhmm(payload.get("end_time"))
+        if not parsed:
+            return jsonify({"error": "invalid end_time"}), 400
+        end_time = parsed
+    if shift_preset in SHIFT_PRESET_TIMES and (
+        "shift_preset" in payload and "start_time" not in payload and "end_time" not in payload
+    ):
+        start_time, end_time = SHIFT_PRESET_TIMES[shift_preset]
+
+    db.execute(
+        """
+        UPDATE work_shifts
+        SET title = ?, assignee = ?, shift_preset = ?, start_time = ?, end_time = ?, weekdays = ?, notes = ?
+        WHERE id = ?
+        """,
+        (
+            title,
+            assignee,
+            shift_preset,
+            start_time,
+            end_time,
+            weekdays_to_storage(weekdays),
+            notes,
+            shift_id,
+        ),
+    )
+    db.commit()
+    updated = db.execute(
+        """
+        SELECT id, title, assignee, shift_preset, start_time, end_time, weekdays, notes, created_at
+        FROM work_shifts WHERE id = ?
+        """,
+        (shift_id,),
+    ).fetchone()
+    return jsonify(work_shift_row(updated))
+
+
+@app.delete("/api/work-shifts/<int:shift_id>")
+@login_required
+def api_work_shifts_delete(shift_id: int):
+    user, household, err = household_for_api()
+    if err:
+        return err
+    get_db().execute(
+        "DELETE FROM work_shifts WHERE id = ? AND household_id = ?",
+        (shift_id, household["id"]),
+    )
+    get_db().commit()
+    return jsonify({"ok": True})
+
+
 @app.get("/api/reminders")
 @login_required
 def api_reminders_list():
@@ -1799,47 +2166,51 @@ def service_worker():
     }
 
 
-# ---------- Stripe ----------
+# ---------- Lemon Squeezy billing ----------
 
 
 @app.post("/billing/checkout")
 @login_required
 @require_household
 def billing_checkout(household, user):
-    price = request.form.get("price") or "monthly"
-    price_id = os.environ.get("STRIPE_PRICE_MONTHLY" if price == "monthly" else "STRIPE_PRICE_YEARLY")
-    if not stripe or not os.environ.get("STRIPE_SECRET_KEY") or not price_id:
+    price = (request.form.get("price") or "monthly").strip().lower()
+    variant_key = "LEMON_SQUEEZY_VARIANT_YEARLY" if price == "yearly" else "LEMON_SQUEEZY_VARIANT_MONTHLY"
+    share_key = "LEMON_SQUEEZY_CHECKOUT_YEARLY" if price == "yearly" else "LEMON_SQUEEZY_CHECKOUT_MONTHLY"
+    variant_id = (os.environ.get(variant_key) or "").strip()
+    share_url = (os.environ.get(share_key) or "").strip()
+    base = (os.environ.get("BASE_URL") or request.url_root).rstrip("/")
+    redirect_url = base + url_for("account") + "?checkout=success"
+
+    if not variant_id and not share_url:
         flash(
-            "Stripe isn’t configured yet. Add STRIPE_SECRET_KEY and STRIPE_PRICE_MONTHLY on Render to enable payments.",
+            "Lemon Squeezy isn’t configured yet. Add LEMON_SQUEEZY_VARIANT_MONTHLY or LEMON_SQUEEZY_CHECKOUT_MONTHLY.",
             "error",
         )
         return redirect(url_for("account"))
 
-    db = get_db()
-    customer_id = household["stripe_customer_id"]
-    if not customer_id:
-        customer = stripe.Customer.create(email=user["email"], name=user["name"], metadata={"household_id": household["id"]})
-        customer_id = customer["id"]
-        db.execute(
-            "UPDATE households SET stripe_customer_id = ? WHERE id = ?",
-            (customer_id, household["id"]),
-        )
-        db.commit()
-
-    base = (os.environ.get("BASE_URL") or request.url_root).rstrip("/")
-    session_obj = stripe.checkout.Session.create(
-        mode="subscription",
-        customer=customer_id,
-        line_items=[{"price": price_id, "quantity": 1}],
-        success_url=base + url_for("account") + "?checkout=success&session_id={CHECKOUT_SESSION_ID}",
-        cancel_url=base + url_for("account") + "?checkout=cancel",
-        client_reference_id=str(household["id"]),
-        metadata={"household_id": str(household["id"])},
-    )
-    checkout_url = stripe_val(session_obj, "url")
-    if not checkout_url:
-        flash("Stripe Checkout did not return a URL. Try again in a moment.", "error")
+    try:
+        if variant_id and (os.environ.get("LEMON_SQUEEZY_API_KEY") or "").strip():
+            checkout_url = create_lemon_checkout_url(
+                variant_id=variant_id,
+                email=user["email"],
+                name=user["name"] or "",
+                household_id=int(household["id"]),
+                redirect_url=redirect_url,
+            )
+        elif share_url:
+            checkout_url = build_lemon_checkout_url(
+                share_url,
+                email=user["email"],
+                household_id=int(household["id"]),
+            )
+        else:
+            flash("Add LEMON_SQUEEZY_API_KEY + STORE_ID, or a LEMON_SQUEEZY_CHECKOUT_MONTHLY share link.", "error")
+            return redirect(url_for("account"))
+    except Exception as exc:
+        print(f"Lemon checkout failed: {exc}")
+        flash("Could not start checkout. Try again in a moment.", "error")
         return redirect(url_for("account"))
+
     return redirect(checkout_url, code=303)
 
 
@@ -1847,65 +2218,81 @@ def billing_checkout(household, user):
 @login_required
 @require_household
 def billing_portal(household, user):
-    if not stripe or not household["stripe_customer_id"]:
-        flash("No Stripe customer on file yet.", "error")
+    """Send the user to Lemon Squeezy customer portal when we have a subscription id."""
+    sub_id = household_field(household, "lemon_subscription_id")
+    api_key = (os.environ.get("LEMON_SQUEEZY_API_KEY") or "").strip()
+    if not sub_id or not api_key:
+        flash("No active Lemon Squeezy subscription on file yet. Subscribe first, or manage billing from your Lemon receipt email.", "error")
         return redirect(url_for("account"))
-    base = (os.environ.get("BASE_URL") or request.url_root).rstrip("/")
-    portal = stripe.billing_portal.Session.create(
-        customer=household["stripe_customer_id"],
-        return_url=base + url_for("account"),
-    )
-    return redirect(portal.url, code=303)
+    try:
+        data = lemon_api_request("GET", f"/subscriptions/{sub_id}")
+        urls = dig(dig(dig(data, "data"), "attributes"), "urls") or {}
+        portal = dig(urls, "customer_portal")
+        if not portal:
+            flash("Customer portal isn’t available yet for this subscription.", "error")
+            return redirect(url_for("account"))
+        return redirect(str(portal), code=303)
+    except Exception as exc:
+        print(f"Lemon portal failed: {exc}")
+        flash("Could not open billing portal. Try again later.", "error")
+        return redirect(url_for("account"))
 
 
 @app.post("/billing/webhook")
 def billing_webhook():
-    if not stripe:
-        return jsonify({"ok": False}), 400
-    payload = request.data
-    sig = request.headers.get("Stripe-Signature", "")
-    secret = (os.environ.get("STRIPE_WEBHOOK_SECRET") or "").strip()
+    raw = request.get_data()
+    secret = (os.environ.get("LEMON_SQUEEZY_WEBHOOK_SECRET") or "").strip()
     if not secret:
         return jsonify({"error": "Webhook secret not configured"}), 503
+    signature = request.headers.get("X-Signature", "")
+    if not verify_lemon_signature(raw, signature, secret):
+        return jsonify({"error": "Invalid signature"}), 400
     try:
-        event = stripe.Webhook.construct_event(payload, sig, secret)
-    except Exception:
-        return jsonify({"error": "Invalid payload"}), 400
+        event = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid JSON"}), 400
 
-    etype = (event.get("type") or "").replace("v1.", "", 1)
-    data = (event.get("data") or {}).get("object") or {}
+    meta = event.get("meta") or {}
+    etype = (meta.get("event_name") or "").strip()
+    custom = meta.get("custom_data") or {}
+    data = event.get("data") or {}
+    attrs = dig(data, "attributes") or {}
+    sub_id = dig(data, "id")
+    customer_id = dig(attrs, "customer_id")
+    status = (dig(attrs, "status") or "").strip().lower()
 
-    if etype == "checkout.session.completed":
-        if data.get("object") == "checkout.session" or data.get("id", "").startswith("cs_"):
-            session_obj = data
-            if not session_obj.get("metadata") and session_obj.get("id") and stripe:
-                try:
-                    session_obj = stripe.checkout.Session.retrieve(session_obj["id"])
-                except Exception:
-                    pass
-            household_id = (session_obj.get("metadata") or {}).get("household_id") or session_obj.get(
-                "client_reference_id"
-            )
-            if household_id:
-                mark_household_plan(
-                    int(household_id),
-                    "active",
-                    session_obj.get("subscription"),
-                    session_obj.get("customer"),
-                )
-    elif etype in ("customer.subscription.updated", "customer.subscription.deleted"):
-        sub_id = data.get("id")
-        if sub_id and not data.get("status") and stripe:
-            try:
-                data = stripe.Subscription.retrieve(sub_id)
-            except Exception:
-                pass
-        status = data.get("status")
-        plan = "active" if status in ("active", "trialing") else ("past_due" if status == "past_due" else "canceled")
-        if sub_id:
+    household_id = custom.get("household_id") if isinstance(custom, dict) else None
+    if household_id is not None:
+        try:
+            household_id = int(household_id)
+        except (TypeError, ValueError):
+            household_id = None
+
+    active_statuses = {"active", "on_trial", "paused"}
+    past_due_statuses = {"past_due", "unpaid"}
+
+    if etype in ("subscription_created", "subscription_updated", "subscription_payment_success"):
+        plan = "active" if status in active_statuses or not status else (
+            "past_due" if status in past_due_statuses else "canceled"
+        )
+        if status in active_statuses or etype == "subscription_created":
+            plan = "active"
+        if household_id:
+            mark_household_plan(household_id, plan, sub_id, customer_id)
+        elif sub_id:
             get_db().execute(
-                "UPDATE households SET plan = ? WHERE stripe_subscription_id = ?",
-                (plan, sub_id),
+                "UPDATE households SET plan = ? WHERE lemon_subscription_id = ?",
+                (plan, str(sub_id)),
+            )
+            get_db().commit()
+    elif etype in ("subscription_cancelled", "subscription_expired", "subscription_payment_failed"):
+        plan = "canceled" if etype != "subscription_payment_failed" else "past_due"
+        if household_id:
+            mark_household_plan(household_id, plan, sub_id, customer_id)
+        elif sub_id:
+            get_db().execute(
+                "UPDATE households SET plan = ? WHERE lemon_subscription_id = ?",
+                (plan, str(sub_id)),
             )
             get_db().commit()
 
@@ -1916,9 +2303,9 @@ def billing_webhook():
 @login_required
 @require_household
 def billing_dev_activate(household, user):
-    """Local/dev helper when Stripe keys are not set yet."""
+    """Local/dev helper when Lemon Squeezy keys are not set yet."""
     if IS_PRODUCTION:
-        flash("Use Stripe Checkout in production.", "error")
+        flash("Use Lemon Squeezy Checkout in production.", "error")
         return redirect(url_for("account"))
     get_db().execute(
         "UPDATE households SET plan = 'active' WHERE id = ?",

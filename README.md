@@ -21,19 +21,22 @@ Open **http://127.0.0.1:5060**
 - Weekly meal planner (breakfast / lunch / dinner)
 - Chore board with assignee + due date
 - Household invite codes / join links
-- 7-day trial, then subscribe (Stripe when keys are set)
+- 7-day trial, then subscribe (Lemon Squeezy when keys are set)
 
-## Stripe (optional for local)
+## Lemon Squeezy (optional for local)
 
-Copy `.env.example` to `.env` and add:
+Copy `.env.example` to `.env` and add (see `E:\winsome-anvil\LEMON-SETUP.md`):
 
-- `STRIPE_SECRET_KEY`
-- `STRIPE_PUBLISHABLE_KEY`
-- `STRIPE_PRICE_MONTHLY`
-- `STRIPE_PRICE_YEARLY`
+- `LEMON_SQUEEZY_API_KEY`
+- `LEMON_SQUEEZY_STORE_ID`
+- `LEMON_SQUEEZY_VARIANT_MONTHLY` (and yearly if used)
+- `LEMON_SQUEEZY_WEBHOOK_SECRET`
+- Or a share link: `LEMON_SQUEEZY_CHECKOUT_MONTHLY`
 - `BASE_URL=http://127.0.0.1:5060`
 
-Without Stripe keys, Account → **Activate test plan** unlocks paid limits for development.
+Without Lemon keys, Account → **Activate test plan** unlocks paid limits for development.
+
+Brand storefront (separate site): `E:\winsome-anvil` → winsomeanvil.com
 
 ## Deploy
 

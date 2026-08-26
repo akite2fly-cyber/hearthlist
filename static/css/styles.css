@@ -1339,6 +1339,40 @@ body.page-app {
   background: rgba(255, 255, 255, 0.9);
 }
 
+.schedule-form {
+  grid-template-columns: 0.7fr 1fr 0.7fr 0.55fr 0.55fr auto;
+  align-items: start;
+}
+
+.schedule-form .schedule-weekdays {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  padding: 0.35rem 0.15rem 0.15rem;
+}
+
+.schedule-form .schedule-weekdays label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft, #5a6b63);
+}
+
+.schedule-form #schedule-notes {
+  grid-column: 1 / -2;
+}
+
+.schedule-print-section-label {
+  margin: 0.35rem 0 0.15rem;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1f4d3a;
+}
+
 .reminder-form {
   display: grid;
   grid-template-columns: 1.2fr 0.9fr 0.7fr auto;
@@ -2072,6 +2106,7 @@ body.page-app {
   .auth-layout,
   .account-grid,
   .chore-form,
+  .schedule-form,
   .reminder-form {
     grid-template-columns: 1fr;
   }
@@ -2166,6 +2201,11 @@ body.page-app {
     overflow: hidden !important;
   }
 
+  body.printing-work,
+  body.printing-combined {
+    overflow: hidden !important;
+  }
+
   body.printing-groceries {
     overflow: hidden !important;
   }
@@ -2196,19 +2236,32 @@ body.page-app {
   }
 
   body.printing-chores #panel-groceries,
-  body.printing-groceries #panel-chores {
+  body.printing-chores #panel-schedule,
+  body.printing-groceries #panel-chores,
+  body.printing-groceries #panel-schedule,
+  body.printing-work #panel-groceries,
+  body.printing-work #panel-chores,
+  body.printing-combined #panel-groceries,
+  body.printing-combined #panel-chores {
     display: none !important;
   }
 
   body.printing-chores #panel-chores,
   body.printing-groceries #panel-groceries,
-  body:not(.printing-chores):not(.printing-groceries) #panel-chores.is-active {
+  body.printing-work #panel-schedule,
+  body.printing-combined #panel-schedule,
+  body:not(.printing-chores):not(.printing-groceries):not(.printing-work):not(.printing-combined) #panel-chores.is-active {
     display: block !important;
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
     background: transparent !important;
     box-shadow: none !important;
+  }
+
+  body.printing-work .schedule-groups,
+  body.printing-combined .schedule-groups {
+    display: none !important;
   }
 
   body.printing-chores #grocery-list,
@@ -2230,6 +2283,20 @@ body.page-app {
   body.printing-chores .chore-print-calendar,
   body.printing-chores .chore-print-calendar.print-only,
   body.printing-chores .chore-print-calendar[hidden] {
+    display: flex !important;
+    flex-direction: column;
+    height: calc(100vh - 0.1in);
+    max-height: 7.5in;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  body.printing-work .schedule-print-calendar,
+  body.printing-work .schedule-print-calendar.print-only,
+  body.printing-work .schedule-print-calendar[hidden],
+  body.printing-combined .schedule-print-calendar,
+  body.printing-combined .schedule-print-calendar.print-only,
+  body.printing-combined .schedule-print-calendar[hidden] {
     display: flex !important;
     flex-direction: column;
     height: calc(100vh - 0.1in);
@@ -2483,7 +2550,7 @@ body.page-app {
     font-style: italic;
   }
 
-  .print-only:not(.chore-print-calendar):not(.grocery-print-sheet),
+  .print-only:not(.chore-print-calendar):not(.grocery-print-sheet):not(.schedule-print-calendar),
   .chore-print-box {
     display: none !important;
   }

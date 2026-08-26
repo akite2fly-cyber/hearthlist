@@ -779,6 +779,7 @@ def plan_status(household) -> dict:
         "member_limit": member_limit,
         "can_invite": access and members < member_limit,
         "lemon_ready": lemon_ready(),
+        "show_dev_activate": (not lemon_ready()) and (not IS_PRODUCTION),
     }
 
 

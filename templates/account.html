@@ -64,11 +64,13 @@
         <button class="btn btn-ghost" type="submit">Manage billing</button>
       </form>
       {% endif %}
-      {% else %}
+      {% elif status.show_dev_activate %}
       <p class="hint">Lemon Squeezy isn’t configured yet. For local testing you can activate a plan:</p>
       <form method="post" action="{{ url_for('billing_dev_activate') }}">
         <button class="btn btn-primary" type="submit">Activate test plan</button>
       </form>
+      {% else %}
+      <p class="hint">Paid plans are almost ready. Your trial still works — billing will appear here when Lemon Squeezy is connected.</p>
       {% endif %}
     </div>
   </article>

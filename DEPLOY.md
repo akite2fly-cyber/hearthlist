@@ -22,9 +22,28 @@ Same path as Daywing.
    - `TURSO_AUTH_TOKEN` — Turso database token
    - `DATA_DIR` — optional fallback only if Turso is not set (`/opt/render/project/src/data`)
    - Lemon Squeezy keys when ready (`LEMON_SQUEEZY_API_KEY`, `LEMON_SQUEEZY_STORE_ID`, `LEMON_SQUEEZY_VARIANT_MONTHLY`, `LEMON_SQUEEZY_WEBHOOK_SECRET`, …)
+   - SMTP for password reset (see below)
 5. Deploy → open the `.onrender.com` URL
 
 With Turso set, signups survive Render redeploys. Create the DB at [app.turso.tech](https://app.turso.tech/).
+
+## 2b) Password reset email (Gmail you already have)
+
+On Render → **hearthlist** → **Environment**, add:
+
+| Key | Value |
+|-----|--------|
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `587` |
+| `SMTP_USER` | your full Gmail address |
+| `SMTP_PASSWORD` | Gmail **App Password** (not your normal password) |
+| `SMTP_FROM` | same Gmail address (or `Hearthlist <you@gmail.com>`) |
+| `SMTP_USE_TLS` | `1` |
+| `BASE_URL` | `https://hearthlist.onrender.com` |
+
+Create an App Password: Google Account → **Security** → **2-Step Verification** (on) → **App passwords** → generate one for Mail → paste into `SMTP_PASSWORD`.
+
+Then open `/forgot-password` on the live site and test with your own signup email.
 
 ## 3) Lemon Squeezy
 

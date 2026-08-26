@@ -31,6 +31,7 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 try:
@@ -171,6 +172,8 @@ app.config.update(
     SESSION_COOKIE_SECURE=IS_PRODUCTION,
     PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30,
 )
+# Render (and other proxies) terminate TLS; honor X-Forwarded-* for https URLs.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
 def static_asset(filename: str) -> str:
@@ -624,7 +627,10 @@ def work_shift_row(r: Any) -> dict:
 
 
 def public_base_url() -> str:
-    return (os.environ.get("BASE_URL") or request.url_root).rstrip("/")
+    configured = (os.environ.get("BASE_URL") or "").strip().rstrip("/")
+    if configured:
+        return configured
+    return (request.url_root or "").rstrip("/")
 
 
 def create_reset_token(user_id: int) -> str:
@@ -647,15 +653,19 @@ def create_reset_token(user_id: int) -> str:
 
 
 def smtp_configured() -> bool:
-    return bool((os.environ.get("SMTP_HOST") or "").strip() and (os.environ.get("SMTP_FROM") or "").strip())
+    host = (os.environ.get("SMTP_HOST") or "").strip()
+    from_addr = (os.environ.get("SMTP_FROM") or "").strip()
+    user = (os.environ.get("SMTP_USER") or "").strip()
+    password = os.environ.get("SMTP_PASSWORD") or ""
+    return bool(host and from_addr and user and password)
 
 
 def send_reset_email(to_email: str, reset_url: str) -> bool:
     """Send a password-reset email when SMTP env vars are set. Returns True on success."""
+    if not smtp_configured():
+        return False
     host = (os.environ.get("SMTP_HOST") or "").strip()
     from_addr = (os.environ.get("SMTP_FROM") or "").strip()
-    if not host or not from_addr:
-        return False
     port = int((os.environ.get("SMTP_PORT") or "587").strip() or "587")
     user = (os.environ.get("SMTP_USER") or "").strip()
     password = os.environ.get("SMTP_PASSWORD") or ""
@@ -673,14 +683,15 @@ def send_reset_email(to_email: str, reset_url: str) -> bool:
 
     try:
         with smtplib.SMTP(host, port, timeout=20) as smtp:
+            smtp.ehlo()
             if use_tls:
                 smtp.starttls()
-            if user:
-                smtp.login(user, password)
+                smtp.ehlo()
+            smtp.login(user, password)
             smtp.send_message(msg)
         return True
     except Exception as exc:  # pragma: no cover
-        print(f"Password reset email failed: {exc}")
+        print(f"Password reset email failed: {type(exc).__name__}: {exc}")
         return False
 
 
@@ -1128,28 +1139,45 @@ def login():
 def forgot_password():
     if current_user():
         return redirect(url_for("home"))
+    email_ready = smtp_configured()
     if request.method == "GET":
-        return render_template("forgot_password.html", email_ready=smtp_configured())
+        return render_template("forgot_password.html", email_ready=email_ready)
 
     email = (request.form.get("email") or "").strip().lower()
     user = get_db().execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     # Same response whether or not the email exists (no account enumeration).
     # Only mint a token when it can be delivered (SMTP) or logged locally (dev).
-    if user and (smtp_configured() or not IS_PRODUCTION):
+    delivered = False
+    if user and (email_ready or not IS_PRODUCTION):
         token = create_reset_token(user["id"])
         reset_url = public_base_url() + url_for("reset_password", token=token)
-        deliver_reset_link(user["email"], reset_url)
+        delivered = deliver_reset_link(user["email"], reset_url)
+        if email_ready and not delivered:
+            print("Password reset: SMTP configured but send failed; check Render logs / SMTP_* vars.")
 
-    flash(
-        "If that email is registered, check your inbox for a reset link. "
-        "It may take a minute to arrive.",
-        "ok",
-    )
+    if email_ready:
+        flash(
+            "If that email is registered, check your inbox for a reset link. "
+            "It may take a minute to arrive.",
+            "ok",
+        )
+    elif not IS_PRODUCTION:
+        flash(
+            "Dev mode: if that email is registered, the reset link was printed in the server console.",
+            "ok",
+        )
+    else:
+        flash(
+            "Password reset email isn’t set up on this server yet. "
+            "If you’re locked out, contact the household owner or support.",
+            "error",
+        )
+
     return render_template(
         "forgot_password.html",
         submitted=True,
         email=email,
-        email_ready=smtp_configured(),
+        email_ready=email_ready,
     )
 
 
